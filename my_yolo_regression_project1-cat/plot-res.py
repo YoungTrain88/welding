@@ -2,10 +2,10 @@ import matplotlib.pyplot as plt
 import os
 
 # 文件路径
-train_loss_file = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_regression_project1\runs\train_losses.txt'
-val_loss_file = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_regression_project1\runs\val_losses.txt'
-val_mae_file = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_regression_project1\runs\val_maes.txt'
-val_r2_file = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_regression_project1\runs\val_r2s.txt'
+train_loss_file = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_regression_project1-cat\runs\train_losses.txt'
+val_loss_file = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_regression_project1-cat\runs\val_losses.txt'
+val_mae_file = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_regression_project1-cat\runs\val_maes.txt'
+val_r2_file = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_regression_project1-cat\runs\val_r2s.txt'
 
 def read_txt(file):
     with open(file, 'r', encoding='utf-8') as f:
