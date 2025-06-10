@@ -29,7 +29,7 @@ SAVE_DIR = os.path.join(r'my_yolo_regression_project1', 'runs') # 保存模型�
 
 # 训练配置
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-EPOCHS = 50
+EPOCHS = 300
 BATCH_SIZE = 8
 LEARNING_RATE = 1e-4
 IMG_SIZE = 224
