@@ -6,7 +6,7 @@ import yaml
 from copy import deepcopy
 
 # 从 ultralytics 导入所有我们需要的模块和函数
-from ultralytics.nn.modules import Conv, C2f, Bottleneck, SPPF, Concat,C3k2
+from ultralytics.nn.modules import Conv, C2f, Bottleneck, SPPF, Concat,C3k2,C2PSA
 from ultralytics.utils.ops import make_divisible
 # from ultralytics.nn.modules.block import *
 
@@ -34,57 +34,50 @@ class RegressionHead(nn.Module):
 # 2. 接着，定义一个我们自己的、能识别 RegressionHead 的模型解析器
 # ==================================================================
 def parse_custom_model(d, ch, verbose=True):
+    import ast
+    # 保证 ch 是列表
+    if isinstance(ch, int):
+        ch = [ch]
+    layers, save, c2 = [], [], ch[-1]
+    nc, gd, gw, ch_mul = (d.get(x) for x in ('nc', 'depth_multiple', 'width_multiple', 'ch_multiple'))
     if verbose:
         print(f"\n{'':>3}{'from':>18}{'n':>3}{'params':>10}  {'module':<40} {'arguments':<30}")
-    
-    nc, gd, gw, ch_mul = (d.get(x) for x in ('nc', 'depth_multiple', 'width_multiple', 'ch_multiple'))
-    ch = [ch]
-    layers, save, c2 = [], [], ch[-1]
     for i, (f, n, m, args) in enumerate(d['backbone'] + d['head']):
-        if m == 'RegressionHead':
-            m = RegressionHead
-        else:
-            m = eval(m) if isinstance(m, str) else m
-
+        # 支持字符串和直接类
+        m = eval(m) if isinstance(m, str) else m
         for j, a in enumerate(args):
-            try:
-                args[j] = eval(a) if isinstance(a, str) else a
-            except (NameError, SyntaxError):
-                pass
-        
+            if isinstance(a, str):
+                with torch.no_grad():
+                    try:
+                        args[j] = ast.literal_eval(a)
+                    except Exception:
+                        pass
         n = max(round(n * gd), 1) if n > 1 else n
-        
-        # ----------- 核心修改在这里 -----------
-        if m in (Conv, C2f, Bottleneck, SPPF, Concat):
-            c1, c2 = ch[f], args[0]
-            if c2 != nc:
-                c2 = make_divisible(c2 * gw, ch_mul or 8)
-            args = [c1, c2, *args[1:]]
-            if m is C2f:
-                args.insert(2, n)
-                n = 1
-        
-        # --- 新增的处理分支，专门为 RegressionHead 准备参数 ---
-        elif m is RegressionHead:
-            c1 = ch[f] # 输入通道数来自上一层
-            c2 = 1     # 输出通道数在回归任务中为1
-            args = [c1] # 将 c1 作为参数传递给 RegressionHead 的 __init__ 方法
-        # ------------------------------------------------
-            
-        else: # 处理其他类型的模块
-            c2 = ch[f]
-        # ----------------------------------------
 
-        m_ = nn.Sequential(*(m(*args) for _ in range(n))) if n > 1 else m(*args)
-        t = str(m)[8:-2].replace('__main__.', '')
+        # 自动推断输入通道
+        if m in [Conv, C3k2, C2PSA]:
+            c1 = ch[f] if isinstance(f, int) else ch[-1]
+            c2 = args[0]
+            k = args[1] if len(args) > 1 else 1
+            s = args[2] if len(args) > 2 else 1
+            m_ = nn.Sequential(*(m(c1, c2, k, s, *args[3:]) for _ in range(n))) if n > 1 else m(c1, c2, k, s, *args[3:])
+        elif m is Concat:
+            c2 = sum([ch[x] for x in f])
+            m_ = m(dim=1)
+        elif m.__name__ == "RegressionHead":
+            c1 = ch[f] if isinstance(f, int) else ch[-1]
+            m_ = m(c1)
+            c2 = 1
+        else:
+            m_ = nn.Sequential(*(m(*args) for _ in range(n))) if n > 1 else m(*args)
+            c2 = ch[-1]
+
         np = sum(x.numel() for x in m_.parameters())
-        m_.i, m_.f, m_.type, m_.np = i, f, t, np
+        t = str(m)[8:-2].replace('__main__.', '')
         if verbose:
-            print(f'{i:>3}{str(f):>18}{n:>3}{np:10.0f}  {t:<40} {str(args):<30}')
+            print(f"{i:>3}{str(f):>18}{n:>3}{np:10.0f}  {t:<40} {str(args):<30}")
         save.extend(x % i for x in ([f] if isinstance(f, int) else f) if x != -1)
         layers.append(m_)
-        if i == 0:
-            ch = []
         ch.append(c2)
     return nn.Sequential(*layers), sorted(save)
 
