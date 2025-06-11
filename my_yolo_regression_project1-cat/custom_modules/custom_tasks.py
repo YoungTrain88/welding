@@ -8,6 +8,7 @@ from copy import deepcopy
 # 从 ultralytics 导入所有我们需要的模块和函数
 from ultralytics.nn.modules import Conv, C2f, Bottleneck, SPPF, Concat
 from ultralytics.utils.ops import make_divisible
+from ultralytics.nn.modules.block import *
 
 # ==================================================================
 # 1. 首先，定义我们的 RegressionHead (保持不变)

@@ -25,7 +25,7 @@ from my_yolo_regression_project1.custom_modules.custom_tasks import RegressionMo
 # 配置
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 MODEL_YAML_PATH = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_regression_project1-cat-shuffed\yolov11n-regression.yaml'
-PRETRAINED_WEIGHTS_PATH = 'yolo11n.pt'  # 你的预训练权重
+PRETRAINED_WEIGHTS_PATH = 'yolo11n-cls.pt'  # 你的预训练权重
 TRAIN_CSV_PATH = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_regression_project1-cat-shuffed\datasets\train.csv'
 VAL_CSV_PATH = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_regression_project1-cat-shuffed\datasets\val.csv'
 SAVE_DIR = os.path.join('my_yolo_regression_project1-cat-shuffed', 'runs-yolo11n')  # 可自定义
@@ -72,10 +72,10 @@ def main():
     print("直接从 YAML 创建自定义 RegressionModel...")
     net = RegressionModel(MODEL_YAML_PATH, ch=3).to(DEVICE)
 
-    # print(f"加载预训练权重从: {PRETRAINED_WEIGHTS_PATH}")
-    # ckpt = torch.load(PRETRAINED_WEIGHTS_PATH, map_location=DEVICE)
-    # state_dict = ckpt['model'].float().state_dict()
-    # net.load_state_dict(state_dict, strict=False)
+    print(f"加载预训练权重从: {PRETRAINED_WEIGHTS_PATH}")
+    ckpt = torch.load(PRETRAINED_WEIGHTS_PATH, map_location=DEVICE)
+    state_dict = ckpt['model'].float().state_dict()
+    net.load_state_dict(state_dict, strict=False)
     print("模型加载并移动到设备。")
 
     criterion = nn.MSELoss()

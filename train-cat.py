@@ -21,15 +21,15 @@ from ultralytics import YOLO
 # ----------------- 2. 定义超参数和配置 -----------------
 # 路径配置
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-MODEL_YAML_PATH = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_regression_project1-cat\yolov8n-regression.yaml'
+MODEL_YAML_PATH = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_regression_project1-cat-shuffed\yolov8n-regression.yaml'
 PRETRAINED_WEIGHTS_PATH = 'yolov8n.pt' # 确保此文件已下载或存在
-TRAIN_CSV_PATH = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_regression_project1-cat\datasets\train.csv'
-VAL_CSV_PATH =r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_regression_project1-cat\datasets\val.csv'
-SAVE_DIR = os.path.join(r'my_yolo_regression_project1-cat', 'runs') # 保存模型权重和结果的目录
+TRAIN_CSV_PATH = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_regression_project1-cat-shuffed\datasets\train.csv'
+VAL_CSV_PATH =r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_regression_project1-cat-shuffed\datasets\val.csv'
+SAVE_DIR = os.path.join(r'my_yolo_regression_project1-cat-shuffed', 'runs-yolov850') # 保存模型权重和结果的目录
 
 # 训练配置
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-EPOCHS = 300
+EPOCHS = 50
 BATCH_SIZE = 8
 LEARNING_RATE = 1e-4
 IMG_SIZE = 224
@@ -49,7 +49,7 @@ class RegressionDataset(Dataset):
 
     def __getitem__(self, idx):
         img_relative_path = self.data_frame.iloc[idx, 0]
-        img_abs_path = os.path.join(PROJECT_ROOT, 'my_yolo_regression_project1-cat', img_relative_path)
+        img_abs_path = os.path.join(PROJECT_ROOT, 'my_yolo_regression_project1-cat-shuffed', img_relative_path)
         image = Image.open(img_abs_path).convert("RGB")
         value = torch.tensor([self.data_frame.iloc[idx, 1]], dtype=torch.float32)
         if self.transform:
