@@ -1,20 +1,23 @@
 # custom_modules/custom_tasks.py
 
+from copy import deepcopy
+
 import torch
 import torch.nn as nn
 import yaml
-from copy import deepcopy
 
 # 从 ultralytics 导入所有我们需要的模块和函数
-from ultralytics.nn.modules import Conv, C2f, Bottleneck, SPPF, Concat,C3k2,C2PSA
-from ultralytics.utils.ops import make_divisible
+from ultralytics.nn.modules import C2PSA, C3k2, Concat, Conv
+
 # from ultralytics.nn.modules.block import *
+
 
 # ==================================================================
 # 1. 首先，定义我们的 RegressionHead (保持不变)
 # ==================================================================
 class RegressionHead(nn.Module):
     """YOLO Regression head, x(b, c1, h, w) to x(b, 1)."""
+
     def __init__(self, c1: int, k: int = 1, s: int = 1, p: int = None, g: int = 1):
         super().__init__()
         c_ = 1280
@@ -35,14 +38,15 @@ class RegressionHead(nn.Module):
 # ==================================================================
 def parse_custom_model(d, ch, verbose=True):
     import ast
+
     # 保证 ch 是列表
     if isinstance(ch, int):
         ch = [ch]
     layers, save, c2 = [], [], ch[-1]
-    nc, gd, gw, ch_mul = (d.get(x) for x in ('nc', 'depth_multiple', 'width_multiple', 'ch_multiple'))
+    nc, gd, gw, ch_mul = (d.get(x) for x in ("nc", "depth_multiple", "width_multiple", "ch_multiple"))
     if verbose:
         print(f"\n{'':>3}{'from':>18}{'n':>3}{'params':>10}  {'module':<40} {'arguments':<30}")
-    for i, (f, n, m, args) in enumerate(d['backbone'] + d['head']):
+    for i, (f, n, m, args) in enumerate(d["backbone"] + d["head"]):
         # 支持字符串和直接类
         m = eval(m) if isinstance(m, str) else m
         for j, a in enumerate(args):
@@ -73,7 +77,7 @@ def parse_custom_model(d, ch, verbose=True):
             c2 = ch[-1]
 
         np = sum(x.numel() for x in m_.parameters())
-        t = str(m)[8:-2].replace('__main__.', '')
+        t = str(m)[8:-2].replace("__main__.", "")
         if verbose:
             print(f"{i:>3}{str(f):>18}{n:>3}{np:10.0f}  {t:<40} {str(args):<30}")
         save.extend(x % i for x in ([f] if isinstance(f, int) else f) if x != -1)
@@ -89,7 +93,7 @@ class RegressionModel(nn.Module):
     def __init__(self, cfg, ch=3, nc=None, verbose=True):
         super().__init__()
         if isinstance(cfg, str):
-            with open(cfg, encoding='utf-8') as f:
+            with open(cfg, encoding="utf-8") as f:
                 self.yaml = yaml.safe_load(f)
         else:
             self.yaml = cfg
@@ -98,10 +102,10 @@ class RegressionModel(nn.Module):
 
     def forward(self, x):
         return self.model(x)
-    
+
     def initialize_biases(self, cf=None):
         for m in self.model.modules():
             if isinstance(m, nn.Conv2d):
-                if hasattr(m, 'bn') and isinstance(m.bn, nn.BatchNorm2d):
+                if hasattr(m, "bn") and isinstance(m.bn, nn.BatchNorm2d):
                     with torch.no_grad():
                         m.bn.bias.zero_()
