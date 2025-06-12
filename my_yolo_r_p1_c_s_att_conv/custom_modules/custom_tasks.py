@@ -115,20 +115,16 @@ def parse_custom_model(d, ch, verbose=True):
         n = max(round(n * gd), 1) if n > 1 else n
 
         # 3. 通道推断和参数准备
-        if m in (Conv, C2f, Bottleneck, SPPF, Concat, C3k2, C2PSA, A2C2f):
+        if m in (Conv, C2f, Bottleneck, SPPF, Concat, C3k2, C2PSA):
             c1 = ch[f] if isinstance(f, int) else ch[-1]
             c2 = args[0]
             args = [c1, c2, *args[1:]]
             if m is Concat:
                 c2 = sum([ch[x] for x in f]) if isinstance(f, (list, tuple)) else ch[f]
                 args = [1]  # dim=1
-            if m is C2f or m is C3k2:
+            if m is C2f:
                 args.insert(2, n)
                 n = 1
-            if m is A2C2f:
-                legacy = False
-                # if scale in "lx":  # for L/X sizes
-                #     args.extend((True, 1.2))
         elif m is CARC:
             c1 = ch[f] if isinstance(f, int) else ch[-1]
             c2 = args[0]

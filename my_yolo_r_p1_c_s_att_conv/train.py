@@ -1,12 +1,4 @@
-# from ultralytics import YOLO
-
-# # Load a model
-# model = YOLO("yolo11n-cls.yaml")  # build a new model from YAML
-# model = YOLO("yolo11n-cls.pt")  # load a pretrained model (recommended for training)
-# model = YOLO("yolo11n-cls.yaml").load("yolo11n-cls.pt")  # build from YAML and transfer weights
-
-# # Train the model
-# results = model.train(data="mnist160", epochs=100, imgsz=64)
+# train.py
 
 import os
 import torch
@@ -17,27 +9,35 @@ from torchvision.transforms import transforms
 from PIL import Image
 import pandas as pd
 from tqdm import tqdm
-from sklearn.metrics import mean_absolute_error, r2_score
+import numpy as np
 
-# 导入自定义RegressionModel
-from my_yolo_regression_project1.custom_modules.custom_tasks import RegressionModel
+# ----------------- 1. 从自定义模块导入所需类 -----------------
+# 确保可以从我们创建的模块中导入 RegressionModel
+from custom_modules.custom_tasks import RegressionModel 
+# 从 ultralytics 导入 YOLO 以便加载模型结构和权重
+from ultralytics import YOLO
 
-# 配置
+# ----------------- 2. 定义超参数和配置 -----------------
+# 路径配置
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-MODEL_YAML_PATH = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_r_p1_c_s_att_conv\yolo12.yaml'
-PRETRAINED_WEIGHTS_PATH = 'yolo11n-cls.pt'  # 你的预训练权重
-TRAIN_CSV_PATH = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_regression_project1-cat-shuffed\datasets\train.csv'
-VAL_CSV_PATH = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_regression_project1-cat-shuffed\datasets\val.csv'
-SAVE_DIR = os.path.join(r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_r_p1_c_s_att_conv', 'runs-yolo12n')  # 可自定义
+MODEL_YAML_PATH = os.path.join(PROJECT_ROOT, 'yolov8n-regression.yaml')
+PRETRAINED_WEIGHTS_PATH = 'yolov8n.pt' # 确保此文件已下载或存在
+TRAIN_CSV_PATH = os.path.join(PROJECT_ROOT, 'datasets', 'train.csv')
+VAL_CSV_PATH = os.path.join(PROJECT_ROOT, 'datasets', 'val.csv')
+SAVE_DIR = os.path.join(PROJECT_ROOT, 'runs') # 保存模型权重和结果的目录
 
+# 训练配置
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-EPOCHS = 100
+EPOCHS = 50
 BATCH_SIZE = 8
 LEARNING_RATE = 1e-4
 IMG_SIZE = 224
 
+# 确保保存目录存在
 os.makedirs(SAVE_DIR, exist_ok=True)
 
+
+# ----------------- 3. 自定义数据集类 -----------------
 class RegressionDataset(Dataset):
     def __init__(self, csv_path, transform=None):
         self.data_frame = pd.read_csv(csv_path)
@@ -48,61 +48,74 @@ class RegressionDataset(Dataset):
 
     def __getitem__(self, idx):
         img_relative_path = self.data_frame.iloc[idx, 0]
-        img_abs_path = os.path.join(PROJECT_ROOT, 'my_yolo_regression_project1-cat-shuffed', img_relative_path)
+        img_abs_path = os.path.join(PROJECT_ROOT, img_relative_path)
         image = Image.open(img_abs_path).convert("RGB")
+        
         value = torch.tensor([self.data_frame.iloc[idx, 1]], dtype=torch.float32)
+
         if self.transform:
             image = self.transform(image)
         return image, value
 
+# ----------------- 4. 主训练逻辑 -----------------
 def main():
     print(f"使用设备: {DEVICE}")
 
+    # --- 数据加载 ---
     transform = transforms.Compose([
         transforms.Resize((IMG_SIZE, IMG_SIZE)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
+    
     train_dataset = RegressionDataset(csv_path=TRAIN_CSV_PATH, transform=transform)
     val_dataset = RegressionDataset(csv_path=VAL_CSV_PATH, transform=transform)
+
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4)
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4)
+    
     print("数据加载器准备完毕。")
 
-    print("直接从 YAML 创建自定义 RegressionModel...")
-    net = RegressionModel(MODEL_YAML_PATH, ch=3).to(DEVICE)
+    # --- 模型初始化 ---
+    # 1. 使用YOLO类从.yaml文件构建模型结构
+    # 2. .load()方法加载预训练的权重到这个结构中
+    # 3. .model 提取出底层的PyTorch nn.Module
+    model_wrapper = YOLO(MODEL_YAML_PATH).load(PRETRAINED_WEIGHTS_PATH)
+    net = model_wrapper.model.to(DEVICE)
+    print("模型加载并移动到设备。")
 
-    # print(f"加载预训练权重从: {PRETRAINED_WEIGHTS_PATH}")
-    # ckpt = torch.load(PRETRAINED_WEIGHTS_PATH, map_location=DEVICE)
-    # state_dict = ckpt['model'].float().state_dict()
-    # net.load_state_dict(state_dict, strict=False)
-    # print("模型加载并移动到设备。")
-
-    criterion = nn.MSELoss()
+    # --- 损失函数和优化器 ---
+    criterion = nn.MSELoss() # 均方误差损失，回归任务首选
+    # criterion = nn.L1Loss() # 也可使用L1损失 (平均绝对误差)
     optimizer = optim.AdamW(net.parameters(), lr=LEARNING_RATE)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5) # 每10个epoch学习率乘以0.5
 
+    # --- 训练循环 ---
     best_val_loss = float('inf')
-    train_losses, val_losses, val_maes, val_r2s = [], [], [], []
 
     for epoch in range(EPOCHS):
+        # 训练阶段
         net.train()
         running_loss = 0.0
         train_pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{EPOCHS} [训练]")
+        
         for images, labels in train_pbar:
             images, labels = images.to(DEVICE), labels.to(DEVICE)
+            
             optimizer.zero_grad()
             outputs = net(images)
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
+            
             running_loss += loss.item()
             train_pbar.set_postfix({'loss': loss.item()})
+        
         avg_train_loss = running_loss / len(train_loader)
-        train_losses.append(avg_train_loss)
 
+        # 验证阶段
         net.eval()
-        val_loss, all_preds, all_labels = 0.0, [], []
+        val_loss = 0.0
         with torch.no_grad():
             val_pbar = tqdm(val_loader, desc=f"Epoch {epoch+1}/{EPOCHS} [验证]")
             for images, labels in val_pbar:
@@ -111,18 +124,19 @@ def main():
                 loss = criterion(outputs, labels)
                 val_loss += loss.item()
                 val_pbar.set_postfix({'val_loss': loss.item()})
-                all_preds.extend(outputs.cpu().numpy().flatten())
-                all_labels.extend(labels.cpu().numpy().flatten())
-        avg_val_loss = val_loss / len(val_loader)
-        val_losses.append(avg_val_loss)
-        val_mae = mean_absolute_error(all_labels, all_preds)
-        val_r2 = r2_score(all_labels, all_preds)
-        val_maes.append(val_mae)
-        val_r2s.append(val_r2)
 
-        print(f"Epoch {epoch+1}/{EPOCHS} -> 训练损失: {avg_train_loss:.4f} | 验证损失: {avg_val_loss:.4f} | 验证MAE: {val_mae:.4f} | 验证R2: {val_r2:.4f}")
+        avg_val_loss = val_loss / len(val_loader)
+        
+        print(f"Epoch {epoch+1}/{EPOCHS} -> 训练损失: {avg_train_loss:.4f} | 验证损失: {avg_val_loss:.4f}")
+
+        # 更新学习率
         scheduler.step()
+
+        # --- 保存模型 ---
+        # 保存最新的模型
         torch.save(net.state_dict(), os.path.join(SAVE_DIR, 'last.pt'))
+        
+        # 如果验证损失创新低，则保存为最佳模型
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
             torch.save(net.state_dict(), os.path.join(SAVE_DIR, 'best.pt'))
@@ -130,19 +144,7 @@ def main():
 
     print("\n训练完成！")
     print(f"最佳模型权重已保存到: {os.path.join(SAVE_DIR, 'best.pt')}")
-    with open(os.path.join(SAVE_DIR, 'train_losses.txt'), 'w', encoding='utf-8') as f:
-        for loss in train_losses:
-            f.write(f"{loss}\n")
-    with open(os.path.join(SAVE_DIR, 'val_losses.txt'), 'w', encoding='utf-8') as f:
-        for loss in val_losses:
-            f.write(f"{loss}\n")
-    with open(os.path.join(SAVE_DIR, 'val_maes.txt'), 'w', encoding='utf-8') as f:
-        for mae in val_maes:
-            f.write(f"{mae}\n")
-    with open(os.path.join(SAVE_DIR, 'val_r2s.txt'), 'w', encoding='utf-8') as f:
-        for r2 in val_r2s:
-            f.write(f"{r2}\n")
+
 
 if __name__ == '__main__':
     main()
-

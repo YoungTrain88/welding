@@ -19,16 +19,16 @@ import pandas as pd
 from tqdm import tqdm
 from sklearn.metrics import mean_absolute_error, r2_score
 
-# 导入自定义RegressionModel
-from my_yolo_regression_project1.custom_modules.custom_tasks import RegressionModel
+# 导入自定义-RegressionModel
+from my_yolo_r_p1_c_s_att_conv.custom_modules.custom_tasks import RegressionModel
 
 # 配置
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-MODEL_YAML_PATH = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_r_p1_c_s_att_conv\yolo12.yaml'
+MODEL_YAML_PATH = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_r_p1_c_s_att_conv\yolov8n-r-att-conv.yaml'
 PRETRAINED_WEIGHTS_PATH = 'yolo11n-cls.pt'  # 你的预训练权重
-TRAIN_CSV_PATH = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_regression_project1-cat-shuffed\datasets\train.csv'
-VAL_CSV_PATH = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_regression_project1-cat-shuffed\datasets\val.csv'
-SAVE_DIR = os.path.join(r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_r_p1_c_s_att_conv', 'runs-yolo12n')  # 可自定义
+TRAIN_CSV_PATH = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_r_p1_c_s_att_conv\datasets\train.csv'
+VAL_CSV_PATH = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_r_p1_c_s_att_conv\datasets\val.csv'
+SAVE_DIR = os.path.join('my_yolo_r_p1_c_s_att_conv', 'runs-yolo8n-AFAR')  # 可自定义
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 EPOCHS = 100
@@ -76,7 +76,7 @@ def main():
     # ckpt = torch.load(PRETRAINED_WEIGHTS_PATH, map_location=DEVICE)
     # state_dict = ckpt['model'].float().state_dict()
     # net.load_state_dict(state_dict, strict=False)
-    # print("模型加载并移动到设备。")
+    print("模型加载并移动到设备。")
 
     criterion = nn.MSELoss()
     optimizer = optim.AdamW(net.parameters(), lr=LEARNING_RATE)
