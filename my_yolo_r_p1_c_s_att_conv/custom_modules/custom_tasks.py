@@ -1,4 +1,4 @@
-# my_yolo_regression_project/custom_modules/custom_tasks.py
+# my_yolo_regression_project/custom_modules/custom_tasks.py (修正版)
 
 import torch
 import torch.nn as nn
@@ -7,140 +7,150 @@ import math
 from copy import deepcopy
 
 # 从 ultralytics 导入所有我们需要的模块和函数
-from ultralytics.nn.modules import Conv, C2f, Bottleneck, SPPF, Concat,C3k2,C2PSA, ABlock, C3k
+from ultralytics.nn.modules import Conv, C2f, Bottleneck, SPPF, Concat, C3, DWConv,SCDown,C3k2,C2PSA,PSA,ABlock,A2C2f
 from ultralytics.utils.ops import make_divisible
 
 
 # ==================================================================
-# 1. 定义您自定义的新模块 (已补全和修正)
+# 1. 定义您自定义的新模块 (此处假设您已定义好，或使用下面的占位符)
 # ==================================================================
+# ... (您的 RegressionHead, AFGCAttention, ARCBlock, CARC 等类的定义放在这里)
+# ... (为确保完整性，我将再次提供这些类的正确定义)
 class RegressionHead(nn.Module):
-    """YOLO Regression head, x(b, c1, h, w) to x(b, 1)."""
-    def __init__(self, c1: int, k: int = 1, s: int = 1, p: int = None, g: int = 1):
+    def __init__(self, c1: int):
         super().__init__()
         c_ = 1280
-        self.conv = Conv(c1, c_, k, s, p, g)
+        self.conv = Conv(c1, c_, 1, 1)
         self.pool = nn.AdaptiveAvgPool2d(1)
         self.drop = nn.Dropout(p=0.1, inplace=True)
         self.linear = nn.Linear(c_, 1)
-
     def forward(self, x):
-        if isinstance(x, list):
-            x = torch.cat(x, 1)
+        if isinstance(x, list): x = torch.cat(x, 1)
         x_flat = self.drop(self.pool(self.conv(x)).flatten(1))
         return self.linear(x_flat)
+
 class AFGCAttention(nn.Module):
-    """
-    一个修正后可运行的自适应细粒度通道注意力模块。
-    它接收一个输入张量，返回一个经过通道注意力加权后的张量，尺寸不变。
-    """
     def __init__(self, channel, b=1, gamma=2):
         super(AFGCAttention, self).__init__()
-        # 根据ECA-Net的思想计算一维卷积的核大小
         t = int(abs((math.log(channel, 2) + b) / gamma))
         k = t if t % 2 else t + 1
-        
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
         self.conv = nn.Conv1d(1, 1, kernel_size=k, padding=(k - 1) // 2, bias=False)
         self.sigmoid = nn.Sigmoid()
-
     def forward(self, x):
-        # 对输入特征图进行全局平均池化，得到通道描述符
         y = self.avg_pool(x)
-        # Reshape并进行一维卷积来捕获通道间的依赖关系
         y = self.conv(y.squeeze(-1).transpose(-1, -2)).transpose(-1, -2).unsqueeze(-1)
-        # 通过sigmoid获得0-1之间的注意力权重
         y = self.sigmoid(y)
-        # 将权重乘以原始输入特征图
         return x * y.expand_as(x)
 
 class ARCBlock(nn.Module):
-    """
-    一个为CARC模块设计的合理的基础块，包含两个卷积层和一个残差连接。
-    """
     def __init__(self, c1, c2, shortcut=True):
         super().__init__()
         self.cv1 = Conv(c1, c2, 3, 1)
         self.cv2 = Conv(c2, c2, 3, 1)
         self.add = shortcut and c1 == c2
-
     def forward(self, x):
         return x + self.cv2(self.cv1(x)) if self.add else self.cv2(self.cv1(x))
 
 class CARC(nn.Module):
-    """
-    Context Aggregation and Refinement Block for CARC-Net
-    一个修正后可运行的CARC模块。
-    """
-    def __init__(self, c1, c2, n=1, e=0.5):  # ch_in, ch_out, number, expansion
+    def __init__(self, c1, c2, n=1, e=0.5):
         super().__init__()
-        c_ = int(c2 * e)  # hidden channels
+        c_ = int(c2 * e)
         self.cv1 = Conv(c1, c_, 1, 1)
         self.cv2 = Conv(c1, c_, 1, 1)
         self.cv3 = Conv(2 * c_, c2, 1)
         self.m = nn.Sequential(*(ARCBlock(c_, c_) for _ in range(n)))
-
     def forward(self, x):
-        # 将通过主分支(带ARCBlock)和旁路分支的特征进行拼接
         return self.cv3(torch.cat((self.m(self.cv1(x)), self.cv2(x)), dim=1))
 
+# --- 其他您可能用到的自定义模块的占位符 ---
+# 如果您使用了其他未在ultralytics.nn.modules中定义的模块，需要在此处添加它们的定义
+# 例如 C3k2, C2PSA, SCDown, PSA, ABlock, C3k, A2C2f
+# class C3k2(C3): pass # 示例，假设它与C3类似
+# class C2PSA(nn.Module): pass # 占位符
+# class SCDown(nn.Module): pass # 占位符
+# class PSA(nn.Module): pass # 占位符
+# class ABlock(nn.Module): pass # 占位符
+# class C3k(C3): pass # 占位符
+# class A2C2f(C2f): pass # 占位符
+
+
 # ==================================================================
-# 2. 更新模型解析器，让它认识新模块
+# 2. 修正后的模型解析器
 # ==================================================================
 def parse_custom_model(d, ch, verbose=True):
+    """
+    一个逻辑正确的、健壮的模型解析器。
+    """
     if verbose:
         print(f"\n{'':>3}{'from':>18}{'n':>3}{'params':>10}  {'module':<40} {'arguments':<30}")
-    gd = d.get('depth_multiple') or 1.0
-    gw = d.get('width_multiple') or 1.0
-    ch_mul = d.get('ch_multiple') or 1
-    ch = [ch]
-    layers, save, c2 = [], [], ch[-1]
+    
+    # 获取模型缩放系数
+    nc = d.get('nc')
+    gd = d.get('depth_multiple', 1.0) # repeats
+    gw = d.get('width_multiple', 1.0) # channels
+    
+    ch = [ch] # 输入通道
+    layers, save, c2 = [], [], ch[-1]  # layers, savelist, ch out
     for i, (f, n, m, args) in enumerate(d['backbone'] + d['head']):
-        # 1. 字符串转类
-        if isinstance(m, str):
-            if m == 'RegressionHead':
-                m = RegressionHead
-            elif m == 'CARC':
-                m = CARC
-            elif m == 'AFGCAttention':
-                m = AFGCAttention
-            else:
-                m = eval(m)
-        # 2. 参数解析
+        # --- 1. 将模块名字符串转换为类 ---
+        # 首先在当前文件的全局变量中查找，如果找不到，再去 ultralytics.nn.modules 中查找
+        # 这样可以确保优先使用我们自己定义的模块
+        m_class = globals().get(m)
+        if m_class is None:
+            try:
+                m_class = getattr(torch.nn, m)
+            except AttributeError:
+                m_class = getattr(__import__('ultralytics.nn.modules', fromlist=[m]), m)
+        m = m_class
+
+        # --- 2. 解析参数 ---
         for j, a in enumerate(args):
             try:
                 args[j] = eval(a) if isinstance(a, str) else a
-            except Exception:
+            except (NameError, SyntaxError):
                 pass
-        n = max(round(n * gd), 1) if n > 1 else n
+        
+        n = max(round(n * gd), 1) if n > 1 else n  # depth gain
 
-        # 3. 通道推断和参数准备
-        if m in (Conv, C2f, Bottleneck, SPPF, Concat, C3k2, C2PSA):
-            c1 = ch[f] if isinstance(f, int) else ch[-1]
-            c2 = args[0]
+        # --- 3. 正确推断输入/输出通道和参数 ---
+        if m in [Conv, C2f, CARC, C3, C3k2, Bottleneck,PSA]:
+            c1, c2 = ch[f], args[0]
+            c2 = make_divisible(c2 * gw, 8) if c2 != nc else c2
             args = [c1, c2, *args[1:]]
-            if m is Concat:
-                c2 = sum([ch[x] for x in f]) if isinstance(f, (list, tuple)) else ch[f]
-                args = [1]  # dim=1
-            if m is C2f:
+            if m in [C2f, C3, C3k2]:
                 args.insert(2, n)
                 n = 1
-        elif m is CARC:
-            c1 = ch[f] if isinstance(f, int) else ch[-1]
-            c2 = args[0]
+        
+        elif m is SPPF:
+            c1, c2 = ch[f], args[0]
+            c2 = make_divisible(c2 * gw, 8) if c2 != nc else c2
             args = [c1, c2, *args[1:]]
-        elif m is AFGCAttention:
-            c1 = ch[f] if isinstance(f, int) else ch[-1]
-            c2 = c1
+        elif m is SCDown:
+            c1, c2 = ch[f], args[0]
+            c2 = make_divisible(c2 * gw, 8) if c2 != nc else c2
+            args = [c1, c2, *args[1:]]
+        elif m is Concat:
+            c2 = sum(ch[x] for x in f)
+        
+        elif m in [AFGCAttention, PSA]: # 注意力模块
+            c1 = c2 = ch[f]
             args = [c1]
+            
         elif m is RegressionHead:
-            c1 = ch[f] if isinstance(f, int) else ch[-1]
+            c1 = ch[f]
             c2 = 1
             args = [c1]
+            
         else:
-            c2 = ch[f] if isinstance(f, int) else ch[-1]
+            c1 = c2 = ch[f]
+            if args:
+                c2 = make_divisible(args[0] * gw, 8) if args[0] != nc else args[0]
+                args = [c1, c2, *args[1:]]
+            else:
+                args = [c1]
 
-    # 4. 实例化
+        # --- 4. 创建模块实例 ---
         m_ = nn.Sequential(*(m(*args) for _ in range(n))) if n > 1 else m(*args)
         t = str(m)[8:-2].replace('__main__.', '')
         np = sum(x.numel() for x in m_.parameters())
@@ -154,8 +164,9 @@ def parse_custom_model(d, ch, verbose=True):
         ch.append(c2)
     return nn.Sequential(*layers), sorted(save)
 
+
 # ==================================================================
-# 3. RegressionModel 的定义保持不变
+# 3. RegressionModel 的定义 (保持不变)
 # ==================================================================
 class RegressionModel(nn.Module):
     def __init__(self, cfg, ch=3, nc=None, verbose=True):
@@ -175,87 +186,3 @@ class RegressionModel(nn.Module):
                 if hasattr(m, 'bn') and isinstance(m.bn, nn.BatchNorm2d):
                     with torch.no_grad():
                         m.bn.bias.zero_()
-
-class A2C2f(nn.Module):
-    """
-    Area-Attention C2f module for enhanced feature extraction with area-based attention mechanisms.
-
-    This module extends the C2f architecture by incorporating area-attention and ABlock layers for improved feature
-    processing. It supports both area-attention and standard convolution modes.
-
-    Attributes:
-        cv1 (Conv): Initial 1x1 convolution layer that reduces input channels to hidden channels.
-        cv2 (Conv): Final 1x1 convolution layer that processes concatenated features.
-        gamma (nn.Parameter | None): Learnable parameter for residual scaling when using area attention.
-        m (nn.ModuleList): List of either ABlock or C3k modules for feature processing.
-
-    Methods:
-        forward: Processes input through area-attention or standard convolution pathway.
-
-    Examples:
-        >>> m = A2C2f(512, 512, n=1, a2=True, area=1)
-        >>> x = torch.randn(1, 512, 32, 32)
-        >>> output = m(x)
-        >>> print(output.shape)
-        torch.Size([1, 512, 32, 32])
-    """
-
-    def __init__(
-        self,
-        c1: int,
-        c2: int,
-        n: int = 1,
-        a2: bool = True,
-        area: int = 1,
-        residual: bool = False,
-        mlp_ratio: float = 2.0,
-        e: float = 0.5,
-        g: int = 1,
-        shortcut: bool = True,
-    ):
-        """
-        Initialize Area-Attention C2f module.
-
-        Args:
-            c1 (int): Number of input channels.
-            c2 (int): Number of output channels.
-            n (int): Number of ABlock or C3k modules to stack.
-            a2 (bool): Whether to use area attention blocks. If False, uses C3k blocks instead.
-            area (int): Number of areas the feature map is divided.
-            residual (bool): Whether to use residual connections with learnable gamma parameter.
-            mlp_ratio (float): Expansion ratio for MLP hidden dimension.
-            e (float): Channel expansion ratio for hidden channels.
-            g (int): Number of groups for grouped convolutions.
-            shortcut (bool): Whether to use shortcut connections in C3k blocks.
-        """
-        super().__init__()
-        c_ = int(c2 * e)  # hidden channels
-        assert c_ % 32 == 0, "Dimension of ABlock be a multiple of 32."
-
-        self.cv1 = Conv(c1, c_, 1, 1)
-        self.cv2 = Conv((1 + n) * c_, c2, 1)
-
-        self.gamma = nn.Parameter(0.01 * torch.ones(c2), requires_grad=True) if a2 and residual else None
-        self.m = nn.ModuleList(
-            nn.Sequential(*(ABlock(c_, c_ // 32, mlp_ratio, area) for _ in range(2)))
-            if a2
-            else C3k(c_, c_, 2, shortcut, g)
-            for _ in range(n)
-        )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass through A2C2f layer.
-
-        Args:
-            x (torch.Tensor): Input tensor.
-
-        Returns:
-            (torch.Tensor): Output tensor after processing.
-        """
-        y = [self.cv1(x)]
-        y.extend(m(y[-1]) for m in self.m)
-        y = self.cv2(torch.cat(y, 1))
-        if self.gamma is not None:
-            return x + self.gamma.view(-1, len(self.gamma), 1, 1) * y
-        return y
