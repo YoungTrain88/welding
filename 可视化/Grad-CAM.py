@@ -107,7 +107,7 @@ def create_resnet50_regression():
 # --- 2. 加载您训练好的模型 ---
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 MODEL_WEIGHTS_PATH = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_regression_project1-cat-shuffed\runs_resnet50\best.pt' # ❗️❗️ 修改为您最佳模型的路径
-IMAGE_PATH = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_regression_project1\datasets\images\100363正.jpg' # ❗️❗️ 修改为您想测试的一张图片路径
+IMAGE_PATH = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_regression_project1-cat-shuffed\datasets\images\100377正_拼接.jpg' # ❗️❗️ 修改为您想测试的一张图片路径
 
 # 创建模型实例并加载权重
 model = create_resnet50_regression()
