@@ -55,8 +55,8 @@ class YOLO(Model):
         (YOLOWorld or YOLOE) based on the model filename.
 
         Args:
-            model (str | Path): Model name or path to model file, i.e. 'yolo11n.pt', 'yolo11n.yaml'.
-            task (str, optional): YOLO task specification, i.e. 'detect', 'segment', 'classify', 'pose', 'obb'.
+            model (str | Path): Model name or path to model file, i.e. 'yolo11n.pt', 'yoclassifylo11n.yaml'.
+            task (str, optional): YOLO task specification, i.e. 'detect', 'segment', '', 'pose', 'obb'.
                 Defaults to auto-detection based on model.
             verbose (bool): Display model info on load.
 

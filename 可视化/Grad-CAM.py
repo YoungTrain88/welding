@@ -1,9 +1,12 @@
+import os
 import torch
-import torch.nn.functional as F
-import cv2
 import numpy as np
 from PIL import Image
 from torchvision.transforms import transforms
+import cv2
+
+# 导入你的自定义模型
+from my_yolo_r_p1_c_s_att_conv.custom_modules.custom_tasks import RegressionModel
 
 # 存储特征图和梯度的全局变量
 feature_maps = []
@@ -85,62 +88,46 @@ def generate_gradcam(model, target_layer, image_tensor, image_pil):
 
     return superimposed_img, output.item()
 
-# visualize.py
-import torch
-from PIL import Image
-from torchvision.transforms import transforms
-import matplotlib.pyplot as plt
-
-# 假设上面的 Grad-CAM 代码和下面的代码在同一个文件中
-# from train_resnet import create_resnet50_regression # 或者从您的训练脚本导入模型创建函数
-
-# --- 1. 定义模型创建函数 (与训练时一致) ---
-import torchvision.models as models
-import torch.nn as nn
-def create_resnet50_regression():
-    model = models.resnet50(weights=None) # 加载模型结构，但不加载预训练权重
-    num_ftrs = model.fc.in_features
-    model.fc = nn.Linear(num_ftrs, 1)
-    return model
-
-
-# --- 2. 加载您训练好的模型 ---
+# 配置
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-MODEL_WEIGHTS_PATH = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_regression_project1-cat-shuffed\runs_resnet50\best.pt' # ❗️❗️ 修改为您最佳模型的路径
-IMAGE_PATH = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_regression_project1-cat-shuffed\datasets\images\100377正_拼接.jpg' # ❗️❗️ 修改为您想测试的一张图片路径
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+RUNS_DIR = os.path.join(PROJECT_ROOT, '..', 'yolo8-12正反拼接-300轮')
+IMAGE_PATH = os.path.join(PROJECT_ROOT, '..', 'my_yolo_regression_project1-cat-shuffed', 'datasets', 'images', '100359正_拼接.jpg')
+YAML_PATH = os.path.join(PROJECT_ROOT, '..', 'my_yolo_r_p1_c_s_att_conv', 'yoloV11n-r-att-conv.yaml')  # 你的yaml结构文件
 
-# 创建模型实例并加载权重
-model = create_resnet50_regression()
-model.load_state_dict(torch.load(MODEL_WEIGHTS_PATH, map_location=DEVICE))
-model.to(DEVICE)
-model.eval()
+# 遍历所有 runs-* 文件夹
+for folder in os.listdir(RUNS_DIR):
+    folder_path = os.path.join(RUNS_DIR, folder)
+    if os.path.isdir(folder_path) and folder.startswith('runs'):
+        best_pt = os.path.join(folder_path, 'best.pt')
+        if not os.path.exists(best_pt):
+            print(f"{folder} 没有 best.pt，跳过")
+            continue
+        print(f"处理: {best_pt}")
 
-# --- 3. 确定目标层 ---
-# 对于ResNet50，最后一个卷积块是 model.layer4
-target_layer = model.layer4[-1] # 选择layer4的最后一个Bottleneck块
+        # 加载自定义模型
+        model = RegressionModel(YAML_PATH, ch=3)
+        model.load_state_dict(torch.load(best_pt, map_location=DEVICE))
+        model.to(DEVICE)
+        model.eval()
 
-# --- 4. 准备输入图片 ---
-img_pil = Image.open(IMAGE_PATH).convert('RGB')
-preprocess = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-])
-img_tensor = preprocess(img_pil).unsqueeze(0).to(DEVICE)
+        # 选择目标层（假设最后一个卷积层叫 model.model[-2]，请根据你的模型结构调整）
+        # 你可以 print(model) 查看结构，选择合适的层
+        target_layer = model.model[-2]  # 这里请根据你的RegressionModel实际结构调整
 
-# --- 5. 生成并显示热力图 ---
-heatmap_image, prediction = generate_gradcam(model, target_layer, img_tensor, img_pil)
+        # 读取图片
+        img_pil = Image.open(IMAGE_PATH).convert('RGB')
+        preprocess = transforms.Compose([
+            transforms.Resize((224, 224)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ])
+        img_tensor = preprocess(img_pil).unsqueeze(0).to(DEVICE)
 
-# 使用 matplotlib 显示结果
-plt.figure(figsize=(10, 5))
-plt.subplot(1, 2, 1)
-plt.imshow(img_pil)
-plt.title("Original Image")
-plt.axis('off')
+        # 生成Grad-CAM
+        heatmap_image, prediction = generate_gradcam(model, target_layer, img_tensor, img_pil)
 
-plt.subplot(1, 2, 2)
-plt.imshow(heatmap_image)
-plt.title(f"Grad-CAM Heatmap\nPredicted Value: {prediction:.2f}")
-plt.axis('off')
-
-plt.show()
+        # 保存结果
+        save_path = os.path.join(folder_path, 'gradcam_100359正_拼接.png')
+        Image.fromarray(heatmap_image).save(save_path)
+        print(f"已保存: {save_path}")

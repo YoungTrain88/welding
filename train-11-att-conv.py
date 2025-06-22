@@ -22,16 +22,19 @@ from sklearn.metrics import mean_absolute_error, r2_score
 # 导入自定义-RegressionModel
 from my_yolo_r_p1_c_s_att_conv.custom_modules.custom_tasks import RegressionModel
 
+PROJECT_NAME = 'yolo8-12-正面'
+YAML_NAME = 'yolov8n'  # 你的YAML配置文件
+EPOCHS = 100
 # 配置
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-MODEL_YAML_PATH = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_r_p1_c_s_att_conv\yoloV11n-r-att-conv.yaml'
+MODEL_YAML_PATH = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\yolo8-12-正面\yaml\yolov8n.yaml'
 PRETRAINED_WEIGHTS_PATH = 'yolo11n-cls.pt'  # 你的预训练权重
-TRAIN_CSV_PATH = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_r_p1_c_s_att_conv\datasets\train.csv'
-VAL_CSV_PATH = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_r_p1_c_s_att_conv\datasets\val.csv'
-SAVE_DIR = os.path.join('my_yolo_r_p1_c_s_att_conv', 'runs-yolo11n-AFAR')  # 可自定义
+TRAIN_CSV_PATH = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\yolo8-12-正面\datasets\train.csv'
+VAL_CSV_PATH = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\yolo8-12-正面\datasets\val.csv'
+SAVE_DIR = os.path.join(PROJECT_NAME, 'runs-'+YAML_NAME)  # 可自定义
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-EPOCHS = 100
+
 BATCH_SIZE = 8
 LEARNING_RATE = 1e-4
 IMG_SIZE = 224
@@ -48,7 +51,7 @@ class RegressionDataset(Dataset):
 
     def __getitem__(self, idx):
         img_relative_path = self.data_frame.iloc[idx, 0]
-        img_abs_path = os.path.join(PROJECT_ROOT, 'my_yolo_regression_project1-cat-shuffed', img_relative_path)
+        img_abs_path = os.path.join(PROJECT_ROOT, PROJECT_NAME, img_relative_path)
         image = Image.open(img_abs_path).convert("RGB")
         value = torch.tensor([self.data_frame.iloc[idx, 1]], dtype=torch.float32)
         if self.transform:
