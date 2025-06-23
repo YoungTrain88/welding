@@ -5,10 +5,9 @@ import torch.nn as nn
 import yaml
 import math
 from copy import deepcopy
-import os
 import sys
-# 添加上上级目录到路径
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
 # 从 ultralytics 导入需要的模块和函数
 from ultralytics.nn.modules import Conv, C2f, Bottleneck, SPPF, Concat, C3, DWConv, SCDown, C3k2, C2PSA, PSA, ABlock, A2C2f

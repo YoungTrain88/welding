@@ -7,6 +7,10 @@ import math
 from copy import deepcopy
 
 # 从 ultralytics 导入所有我们需要的模块和函数
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
+
 from ultralytics.nn.modules import Conv, C2f, Bottleneck, SPPF, Concat, C3, DWConv,SCDown,C3k2,C2PSA,PSA,ABlock,A2C2f
 from ultralytics.utils.ops import make_divisible
 
