@@ -94,14 +94,20 @@ def parse_custom_model(d, ch, verbose=True):
     layers, save, c2 = [], [], ch[-1]  # layers, savelist, ch out
     for i, (f, n, m, args) in enumerate(d['backbone'] + d['head']):
         # --- 1. 将模块名字符串转换为类 ---
-        # 首先在当前文件的全局变量中查找，如果找不到，再去 ultralytics.nn.modules 中查找
-        # 这样可以确保优先使用我们自己定义的模块
+        # 支持 'nn.Upsample' 这种写法
         m_class = globals().get(m)
         if m_class is None:
-            try:
-                m_class = getattr(torch.nn, m)
-            except AttributeError:
-                m_class = getattr(__import__('ultralytics.nn.modules', fromlist=[m]), m)
+            if isinstance(m, str) and '.' in m:
+                pkg, cls = m.split('.', 1)
+                if pkg == 'nn':
+                    m_class = getattr(torch.nn, cls)
+                else:
+                    m_class = getattr(__import__(f'ultralytics.nn.modules.{pkg}', fromlist=[cls]), cls)
+            else:
+                try:
+                    m_class = getattr(torch.nn, m)
+                except AttributeError:
+                    m_class = getattr(__import__('ultralytics.nn.modules', fromlist=[m]), m)
         m = m_class
 
         # --- 2. 解析参数 ---
@@ -114,8 +120,10 @@ def parse_custom_model(d, ch, verbose=True):
         n = max(round(n * gd), 1) if n > 1 else n  # depth gain
 
         # --- 3. 正确推断输入/输出通道和参数 ---
-        if m in [Conv, C2f, CARC, C3, C3k2, Bottleneck,PSA]:
+        if m in [Conv, C2f, CARC, C3, C3k2, Bottleneck, PSA]:
             c1, c2 = ch[f], args[0]
+            if c1 is None or c2 is None:
+                raise ValueError(f"Layer {i}: c1 or c2 is None! ch={ch}, args={args}, yaml={d}")
             c2 = make_divisible(c2 * gw, 8) if c2 != nc else c2
             args = [c1, c2, *args[1:]]
             if m in [C2f, C3, C3k2]:

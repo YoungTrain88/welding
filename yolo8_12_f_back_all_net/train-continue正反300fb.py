@@ -21,14 +21,16 @@ from sklearn.metrics import mean_absolute_error, r2_score
 import glob
 
 # 导入自定义-RegressionModel
-from my_yolo_r_p1_c_s_att_conv.custom_modules.custom_tasks import RegressionModel
+from yolo8_12_front_all_net.custom_modules.custom_tasks import RegressionModel
+
+
 
 # 配置
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 # MODEL_YAML_PATH = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_r_p1_c_s_att_conv\yoloV11n-r-att-conv.yaml'
 # PRETRAINED_WEIGHTS_PATH = 'yolo11n-cls.pt'  # 你的预训练权重
-PROJECT_NAME= 'yolo8-12-正面300轮'
-EPOCHS = 300 #调整训练轮数看R2能否有所提高
+PROJECT_NAME= 'yolo8_12_front_all_net'
+EPOCHS = 1 #调整训练轮数看R2能否有所提高
 TRAIN_CSV_PATH = os.path.join(PROJECT_ROOT, PROJECT_NAME, 'datasets', 'train.csv')
 VAL_CSV_PATH = os.path.join(PROJECT_ROOT,  PROJECT_NAME,'datasets', 'val.csv')
 # SAVE_DIR = os.path.join('my_yolo_r_p1_c_s_att_conv', 'runs-yolo11n-AFAR')  # 可自定义
@@ -142,7 +144,7 @@ def train_one_yaml(yaml_path):
             f.write(f"{r2}\n")
 
 if __name__ == '__main__':
-    yaml_dir = os.path.join(PROJECT_ROOT, 'yolo8-12-正面', 'yaml')
+    yaml_dir = os.path.join(PROJECT_ROOT, PROJECT_NAME, 'yaml')
     yaml_files = glob.glob(os.path.join(yaml_dir, '*.yaml'))
     print(f"共检测到 {len(yaml_files)} 个yaml文件，将依次训练：")
     for yaml_path in yaml_files:

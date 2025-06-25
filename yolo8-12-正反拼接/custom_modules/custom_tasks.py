@@ -1,19 +1,16 @@
 # my_yolo_regression_project/custom_modules/custom_tasks.py (修正版)
 
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
+from ultralytics.nn.modules import Conv, C2f, Bottleneck, SPPF, Concat, C3, DWConv, SCDown, C3k2, C2PSA, PSA, ABlock, A2C2f
+
 import torch
 import torch.nn as nn
 import yaml
 import math
 from copy import deepcopy
-
-# 从 ultralytics 导入所有我们需要的模块和函数
-import sys
-import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
-from ultralytics.nn.modules import Conv, C2f, Bottleneck, SPPF, Concat, C3, DWConv,SCDown,C3k2,C2PSA,PSA,ABlock,A2C2f
-
 from ultralytics.utils.ops import make_divisible
-
 
 # ==================================================================
 # 1. 定义您自定义的新模块 (此处假设您已定义好，或使用下面的占位符)
@@ -84,28 +81,28 @@ class CARC(nn.Module):
 # ==================================================================
 def parse_custom_model(d, ch, verbose=True):
     """
-    一个逻辑正确的、健壮的模型解析器。
+    参考ultralytics的parse_model，支持Concat和nn.Upsample等模块。
     """
     if verbose:
         print(f"\n{'':>3}{'from':>18}{'n':>3}{'params':>10}  {'module':<40} {'arguments':<30}")
-    
-    # 获取模型缩放系数
+
     nc = d.get('nc')
-    gd = d.get('depth_multiple', 1.0) # repeats
-    gw = d.get('width_multiple', 1.0) # channels
-    
-    ch = [ch] # 输入通道
-    layers, save, c2 = [], [], ch[-1]  # layers, savelist, ch out
+    gd = d.get('depth_multiple', 1.0)
+    gw = d.get('width_multiple', 1.0)
+
+    ch = [ch]
+    layers, save, c2 = [], [], ch[-1]
     for i, (f, n, m, args) in enumerate(d['backbone'] + d['head']):
         # --- 1. 将模块名字符串转换为类 ---
-        # 首先在当前文件的全局变量中查找，如果找不到，再去 ultralytics.nn.modules 中查找
-        # 这样可以确保优先使用我们自己定义的模块
         m_class = globals().get(m)
         if m_class is None:
-            try:
-                m_class = getattr(torch.nn, m)
-            except AttributeError:
-                m_class = getattr(__import__('ultralytics.nn.modules', fromlist=[m]), m)
+            if isinstance(m, str) and m.startswith('nn.'):
+                m_class = getattr(torch.nn, m[3:])
+            else:
+                try:
+                    m_class = getattr(torch.nn, m)
+                except AttributeError:
+                    m_class = getattr(__import__('ultralytics.nn.modules', fromlist=[m]), m)
         m = m_class
 
         # --- 2. 解析参数 ---
@@ -114,38 +111,27 @@ def parse_custom_model(d, ch, verbose=True):
                 args[j] = eval(a) if isinstance(a, str) else a
             except (NameError, SyntaxError):
                 pass
-        
-        n = max(round(n * gd), 1) if n > 1 else n  # depth gain
+
+        n = max(round(n * gd), 1) if n > 1 else n
 
         # --- 3. 正确推断输入/输出通道和参数 ---
-        if m in [Conv, C2f, CARC, C3, C3k2, Bottleneck,PSA]:
+        if m in [Conv, C2f, Bottleneck, C3, DWConv, SCDown, C3k2, C2PSA, PSA, ABlock, A2C2f]:
             c1, c2 = ch[f], args[0]
             c2 = make_divisible(c2 * gw, 8) if c2 != nc else c2
             args = [c1, c2, *args[1:]]
-            if m in [C2f, C3, C3k2]:
+            if m in [C2f, C3, C3k2, A2C2f]:
                 args.insert(2, n)
                 n = 1
-        
+
         elif m is SPPF:
-            c1, c2 = ch[f], args[0]
-            c2 = make_divisible(c2 * gw, 8) if c2 != nc else c2
-            args = [c1, c2, *args[1:]]
-        elif m is SCDown:
             c1, c2 = ch[f], args[0]
             c2 = make_divisible(c2 * gw, 8) if c2 != nc else c2
             args = [c1, c2, *args[1:]]
         elif m is Concat:
             c2 = sum(ch[x] for x in f)
-        
-        elif m in [AFGCAttention, PSA]: # 注意力模块
-            c1 = c2 = ch[f]
-            args = [c1]
-            
-        elif m is RegressionHead:
-            c1 = ch[f]
-            c2 = 1
-            args = [c1]
-            
+        elif m is nn.Upsample:
+            # nn.Upsample 不需要通道参数
+            pass
         else:
             c1 = c2 = ch[f]
             if args:
@@ -165,7 +151,7 @@ def parse_custom_model(d, ch, verbose=True):
         layers.append(m_)
         if i == 0:
             ch = []
-        ch.append(c2)
+        ch.append(c2 if m is not nn.Upsample else ch[f])
     return nn.Sequential(*layers), sorted(save)
 
 
