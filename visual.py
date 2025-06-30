@@ -6,8 +6,8 @@ from torchvision.transforms import transforms
 import cv2
 
 # 导入你的自定义模型
-from custom_modules.custom_tasks import RegressionModel
-IMAGE_NAME = '100359正.jpg'
+from yolo8_12_front_all_net.custom_modules.custom_tasks import RegressionModel
+IMAGE_NAME = '100359正_拼接.jpg'
 
 def generate_gradcam(model, target_layer, image_tensor, image_pil):
     feature_maps = []
@@ -51,7 +51,7 @@ def generate_gradcam(model, target_layer, image_tensor, image_pil):
 # 配置
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 # PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = r"C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\yolo8_12_front_all_net"
+PROJECT_ROOT = r"C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\yolo8_12_f_back_all_net"
 RUNS_DIR = PROJECT_ROOT
 IMAGE_PATH = os.path.join(PROJECT_ROOT, 'datasets', 'images', IMAGE_NAME)
 YAML_DIR = os.path.join(PROJECT_ROOT, 'yaml')
