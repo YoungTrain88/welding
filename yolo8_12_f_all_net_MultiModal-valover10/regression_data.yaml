@@ -1,0 +1,11 @@
+# 数据集配置文件
+# 路径相对于项目根目录
+
+
+train: datasets\train.csv
+val: datasets\val.csv
+# 类别名称 (对于回归任务，这里只是一个占位符)
+
+names:
+  0: 'value'
+

@@ -10,6 +10,8 @@ from PIL import Image
 import pandas as pd
 from tqdm import tqdm
 from sklearn.metrics import mean_absolute_error, r2_score
+from torchinfo import summary
+
 import glob
 
 # 导入自定义-RegressionModel
@@ -22,7 +24,7 @@ PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 # MODEL_YAML_PATH = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\my_yolo_r_p1_c_s_att_conv\yoloV11n-r-att-conv.yaml'
 # PRETRAINED_WEIGHTS_PATH = 'yolo11n-cls.pt'  # 你的预训练权重
 PROJECT_NAME= 'yolo8_12_fb_all_net_MultiModal'
-EPOCHS = 1 #调整训练轮数看R2能否有所提高
+EPOCHS = 100 #调整训练轮数看R2能否有所提高
 TRAIN_CSV_PATH = os.path.join(PROJECT_ROOT, PROJECT_NAME, 'datasets', 'train.csv')
 VAL_CSV_PATH = os.path.join(PROJECT_ROOT,  PROJECT_NAME,'datasets', 'val.csv')
 # SAVE_DIR = os.path.join('my_yolo_r_p1_c_s_att_conv', 'runs-yolo11n-AFAR')  # 可自定义
@@ -81,13 +83,28 @@ def train_one_yaml(yaml_path):
     os.makedirs(save_dir, exist_ok=True)
 
     # 其余配置和数据加载不变
-    transform = transforms.Compose([
+    # transform = transforms.Compose([
+    #     transforms.Resize((IMG_SIZE, IMG_SIZE)),
+    #     transforms.ToTensor(),
+    #     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    # ])
+    
+    train_transform = transforms.Compose([
+        transforms.Resize((IMG_SIZE, IMG_SIZE)),
+        transforms.RandomHorizontalFlip(p=0.5), # <--- 新增：随机水平翻转
+        transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2), # <--- 新增：随机颜色抖动
+        transforms.RandomRotation(10), # <--- 新增：随机旋转 +/-10度
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
+    
+    val_transform = transforms.Compose([ # 验证集的变换保持不变
         transforms.Resize((IMG_SIZE, IMG_SIZE)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
-    train_dataset = RegressionDataset(csv_path=TRAIN_CSV_PATH, transform=transform)
-    val_dataset = RegressionDataset(csv_path=VAL_CSV_PATH, transform=transform)
+    train_dataset = RegressionDataset(csv_path=TRAIN_CSV_PATH, transform=train_transform)
+    val_dataset = RegressionDataset(csv_path=VAL_CSV_PATH, transform=val_transform)
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4)
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4)
     
@@ -102,9 +119,41 @@ def train_one_yaml(yaml_path):
         yaml_path=yaml_path,
         num_tabular_features=NUM_TABULAR_FEATURES
     ).to(DEVICE)
+    # 获取表格特征数量
+    temp_df = pd.read_csv(TRAIN_CSV_PATH)
+    NUM_TABULAR_FEATURES = len(temp_df.columns) - 2
+    print(f"检测到 {NUM_TABULAR_FEATURES} 个表格特征。")
+
+    # 初始化新的多模态模型
+    net = MultiModalModel(
+        yaml_path=yaml_path,
+        num_tabular_features=NUM_TABULAR_FEATURES
+    ).to(DEVICE)
+
+    # ==================== 在这里添加模型结构打印代码 ====================
+    print("\n" + "="*50)
+    print(f"             模型结构: {os.path.basename(yaml_path)}")
+    print("="*50)
+    
+    # 定义模型的输入尺寸，注意我们有两个输入，所以提供一个列表
+    # (batch_size, channels, height, width) for image
+    # (batch_size, num_features) for tabular data
+    # IMG_SIZE 是您在脚本配置中定义的图像尺寸
+    input_sizes = [(BATCH_SIZE, 3, IMG_SIZE, IMG_SIZE), (BATCH_SIZE, NUM_TABULAR_FEATURES)]
+    
+    # 使用 torchinfo 打印详细摘要
+    # col_names 指定了要显示的列
+    summary(net, 
+            input_size=input_sizes, 
+            col_names=["input_size", "output_size", "num_params", "mult_adds"],
+            depth=3) # depth 控制显示子模块的深度
+    
+    print("="*50 + "\n")
+    # ========================== 打印代码结束 ==========================
 
     criterion = nn.MSELoss()
-    optimizer = optim.AdamW(net.parameters(), lr=LEARNING_RATE)
+     # 修改这里，加入 weight_decay
+    optimizer = optim.AdamW(net.parameters(), lr=LEARNING_RATE, weight_decay=1e-2) # <--- 增加 weight_decay
     # ... (scheduler 和其他变量定义不变) ...
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
 
@@ -198,7 +247,7 @@ class MultiModalModel(nn.Module):
         self.tabular_branch = nn.Sequential(
             nn.Linear(num_tabular_features, hidden_dim * 2),
             nn.ReLU(),
-            nn.Dropout(0.2),
+            nn.Dropout(0.5), # <--- 从 0.2 增加到 0.5
             nn.Linear(hidden_dim * 2, hidden_dim)
         )
         
@@ -206,7 +255,7 @@ class MultiModalModel(nn.Module):
         self.fusion_head = nn.Sequential(
             nn.Linear(img_feature_dim + hidden_dim, hidden_dim),
             nn.ReLU(),
-            nn.Dropout(0.2),
+            nn.Dropout(0.5), # <--- 从 0.2 增加到 0.5
             nn.Linear(hidden_dim, 1) # 最后输出一个回归值
         )
 
