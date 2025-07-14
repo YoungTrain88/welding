@@ -1,14 +1,14 @@
 # my_yolo_regression_project/custom_modules/custom_tasks.py
 
-import torch
-import torch.nn as nn
-import yaml
 import math
 from copy import deepcopy
 
+import torch
+import torch.nn as nn
+import yaml
+
 # 从 ultralytics 导入所有我们需要的模块和函数
-from ultralytics.nn.modules import Conv, C2f, Bottleneck, SPPF, Concat,C3k2,C2PSA, ABlock, C3k
-from ultralytics.utils.ops import make_divisible
+from ultralytics.nn.modules import C2PSA, SPPF, ABlock, Bottleneck, C2f, C3k, C3k2, Concat, Conv
 
 
 # ==================================================================
@@ -16,6 +16,7 @@ from ultralytics.utils.ops import make_divisible
 # ==================================================================
 class RegressionHead(nn.Module):
     """YOLO Regression head, x(b, c1, h, w) to x(b, 1)."""
+
     def __init__(self, c1: int, k: int = 1, s: int = 1, p: int = None, g: int = 1):
         super().__init__()
         c_ = 1280
@@ -29,17 +30,20 @@ class RegressionHead(nn.Module):
             x = torch.cat(x, 1)
         x_flat = self.drop(self.pool(self.conv(x)).flatten(1))
         return self.linear(x_flat)
+
+
 class AFGCAttention(nn.Module):
     """
     一个修正后可运行的自适应细粒度通道注意力模块。
-    它接收一个输入张量，返回一个经过通道注意力加权后的张量，尺寸不变。
+    它接收一个输入张量，返回一个经过通道注意力加权后的张量，尺寸不变。.
     """
+
     def __init__(self, channel, b=1, gamma=2):
-        super(AFGCAttention, self).__init__()
+        super().__init__()
         # 根据ECA-Net的思想计算一维卷积的核大小
         t = int(abs((math.log(channel, 2) + b) / gamma))
         k = t if t % 2 else t + 1
-        
+
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
         self.conv = nn.Conv1d(1, 1, kernel_size=k, padding=(k - 1) // 2, bias=False)
         self.sigmoid = nn.Sigmoid()
@@ -54,10 +58,10 @@ class AFGCAttention(nn.Module):
         # 将权重乘以原始输入特征图
         return x * y.expand_as(x)
 
+
 class ARCBlock(nn.Module):
-    """
-    一个为CARC模块设计的合理的基础块，包含两个卷积层和一个残差连接。
-    """
+    """一个为CARC模块设计的合理的基础块，包含两个卷积层和一个残差连接。."""
+
     def __init__(self, c1, c2, shortcut=True):
         super().__init__()
         self.cv1 = Conv(c1, c2, 3, 1)
@@ -67,11 +71,13 @@ class ARCBlock(nn.Module):
     def forward(self, x):
         return x + self.cv2(self.cv1(x)) if self.add else self.cv2(self.cv1(x))
 
+
 class CARC(nn.Module):
     """
     Context Aggregation and Refinement Block for CARC-Net
-    一个修正后可运行的CARC模块。
+    一个修正后可运行的CARC模块。.
     """
+
     def __init__(self, c1, c2, n=1, e=0.5):  # ch_in, ch_out, number, expansion
         super().__init__()
         c_ = int(c2 * e)  # hidden channels
@@ -84,25 +90,26 @@ class CARC(nn.Module):
         # 将通过主分支(带ARCBlock)和旁路分支的特征进行拼接
         return self.cv3(torch.cat((self.m(self.cv1(x)), self.cv2(x)), dim=1))
 
+
 # ==================================================================
 # 2. 更新模型解析器，让它认识新模块
 # ==================================================================
 def parse_custom_model(d, ch, verbose=True):
     if verbose:
         print(f"\n{'':>3}{'from':>18}{'n':>3}{'params':>10}  {'module':<40} {'arguments':<30}")
-    gd = d.get('depth_multiple') or 1.0
-    gw = d.get('width_multiple') or 1.0
-    ch_mul = d.get('ch_multiple') or 1
+    gd = d.get("depth_multiple") or 1.0
+    d.get("width_multiple") or 1.0
+    d.get("ch_multiple") or 1
     ch = [ch]
     layers, save, c2 = [], [], ch[-1]
-    for i, (f, n, m, args) in enumerate(d['backbone'] + d['head']):
+    for i, (f, n, m, args) in enumerate(d["backbone"] + d["head"]):
         # 1. 字符串转类
         if isinstance(m, str):
-            if m == 'RegressionHead':
+            if m == "RegressionHead":
                 m = RegressionHead
-            elif m == 'CARC':
+            elif m == "CARC":
                 m = CARC
-            elif m == 'AFGCAttention':
+            elif m == "AFGCAttention":
                 m = AFGCAttention
             else:
                 m = eval(m)
@@ -126,7 +133,7 @@ def parse_custom_model(d, ch, verbose=True):
                 args.insert(2, n)
                 n = 1
             if m is A2C2f:
-                legacy = False
+                pass
                 # if scale in "lx":  # for L/X sizes
                 #     args.extend((True, 1.2))
         elif m is CARC:
@@ -144,19 +151,20 @@ def parse_custom_model(d, ch, verbose=True):
         else:
             c2 = ch[f] if isinstance(f, int) else ch[-1]
 
-    # 4. 实例化
+        # 4. 实例化
         m_ = nn.Sequential(*(m(*args) for _ in range(n))) if n > 1 else m(*args)
-        t = str(m)[8:-2].replace('__main__.', '')
+        t = str(m)[8:-2].replace("__main__.", "")
         np = sum(x.numel() for x in m_.parameters())
         m_.i, m_.f, m_.type, m_.np = i, f, t, np
         if verbose:
-            print(f'{i:>3}{str(f):>18}{n:>3}{np:10.0f}  {t:<40} {str(args):<30}')
+            print(f"{i:>3}{str(f):>18}{n:>3}{np:10.0f}  {t:<40} {str(args):<30}")
         save.extend(x % i for x in ([f] if isinstance(f, int) else f) if x != -1)
         layers.append(m_)
         if i == 0:
             ch = []
         ch.append(c2)
     return nn.Sequential(*layers), sorted(save)
+
 
 # ==================================================================
 # 3. RegressionModel 的定义保持不变
@@ -165,20 +173,23 @@ class RegressionModel(nn.Module):
     def __init__(self, cfg, ch=3, nc=None, verbose=True):
         super().__init__()
         if isinstance(cfg, str):
-            with open(cfg, encoding='utf-8') as f:
+            with open(cfg, encoding="utf-8") as f:
                 self.yaml = yaml.safe_load(f)
         else:
             self.yaml = cfg
         self.model, self.save = parse_custom_model(deepcopy(self.yaml), ch=ch, verbose=verbose)
         self.initialize_biases()
+
     def forward(self, x):
         return self.model(x)
+
     def initialize_biases(self, cf=None):
         for m in self.model.modules():
             if isinstance(m, nn.Conv2d):
-                if hasattr(m, 'bn') and isinstance(m.bn, nn.BatchNorm2d):
+                if hasattr(m, "bn") and isinstance(m.bn, nn.BatchNorm2d):
                     with torch.no_grad():
                         m.bn.bias.zero_()
+
 
 class A2C2f(nn.Module):
     """

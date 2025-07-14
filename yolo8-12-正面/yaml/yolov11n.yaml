@@ -6,8 +6,8 @@
 
 # Parameters
 nc: 1 # number of classes
-depth_multiple: 0.33  # model depth multiple
-width_multiple: 0.25  # layer channel multiple
+depth_multiple: 0.33 # model depth multiple
+width_multiple: 0.25 # layer channel multiple
 scales: # model compound scaling constants, i.e. 'model=yolo11n-cls.yaml' will call yolo11-cls.yaml with scale 'n'
   # [depth, width, max_channels]
   n: [0.50, 0.25, 1024] # summary: 86 layers, 1633584 parameters, 1633584 gradients, 0.5 GFLOPs
