@@ -15,5 +15,5 @@ import os
 # os.system(r'cd /d C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main && D:\miniconda\envs\yolov11_mask\python.exe C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\train-continue正反300fb_多模态.py')
 
 #yolo多模态修改维度4/8
-os.system(r'cd /d C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main && D:\miniconda\envs\yolov11_mask\python.exe C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\train-continue正300f_多模态4_8dim.py')
-os.system(r'cd /d C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main && D:\miniconda\envs\yolov11_mask\python.exe C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\train-continue正反300fb_多模态4_8dim.py')
+os.system(r'cd /d C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main && D:\miniconda\envs\yolov11_mask\python.exe C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\train-diffient-model正.py')
+os.system(r'cd /d C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main && D:\miniconda\envs\yolov11_mask\python.exe C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\train-diffient-model正反.py')
