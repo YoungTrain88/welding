@@ -1,20 +1,34 @@
 # my_yolo_regression_project/custom_modules/custom_tasks.py (修正版)
 
-import torch
-import torch.nn as nn
-import yaml
 import math
-from copy import deepcopy
-import torch.nn.functional as F
+import os
 
 # 从 ultralytics 导入所有我们需要的模块和函数
 import sys
-import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
+from copy import deepcopy
 
-from ultralytics.nn.modules import Conv, C2f, Bottleneck, SPPF, Concat, C3, DWConv,SCDown,C3k2,C2PSA,PSA,ABlock,A2C2f,C2fCIB
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import yaml
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
+
+from ultralytics.nn.modules import (
+    C2PSA,
+    C3,
+    PSA,
+    SPPF,
+    A2C2f,
+    Bottleneck,
+    C2f,
+    C2fCIB,
+    C3k2,
+    Concat,
+    Conv,
+    SCDown,
+)
 from ultralytics.utils.ops import make_divisible
-
 
 # ==================================================================
 # 1. 定义您自定义的新模块 (此处假设您已定义好，或使用下面的占位符)
@@ -34,19 +48,22 @@ from ultralytics.utils.ops import make_divisible
 #         x_flat = self.drop(self.pool(self.conv(x)).flatten(1))
 #         return self.linear(x_flat)
 
+
 class AFGCAttention(nn.Module):
     def __init__(self, channel, b=1, gamma=2):
-        super(AFGCAttention, self).__init__()
+        super().__init__()
         t = int(abs((math.log(channel, 2) + b) / gamma))
         k = t if t % 2 else t + 1
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
         self.conv = nn.Conv1d(1, 1, kernel_size=k, padding=(k - 1) // 2, bias=False)
         self.sigmoid = nn.Sigmoid()
+
     def forward(self, x):
         y = self.avg_pool(x)
         y = self.conv(y.squeeze(-1).transpose(-1, -2)).transpose(-1, -2).unsqueeze(-1)
         y = self.sigmoid(y)
         return x * y.expand_as(x)
+
 
 class ARCBlock(nn.Module):
     def __init__(self, c1, c2, shortcut=True):
@@ -54,8 +71,10 @@ class ARCBlock(nn.Module):
         self.cv1 = Conv(c1, c2, 3, 1)
         self.cv2 = Conv(c2, c2, 3, 1)
         self.add = shortcut and c1 == c2
+
     def forward(self, x):
         return x + self.cv2(self.cv1(x)) if self.add else self.cv2(self.cv1(x))
+
 
 class CARC(nn.Module):
     def __init__(self, c1, c2, n=1, e=0.5):
@@ -65,8 +84,10 @@ class CARC(nn.Module):
         self.cv2 = Conv(c1, c_, 1, 1)
         self.cv3 = Conv(2 * c_, c2, 1)
         self.m = nn.Sequential(*(ARCBlock(c_, c_) for _ in range(n)))
+
     def forward(self, x):
         return self.cv3(torch.cat((self.m(self.cv1(x)), self.cv2(x)), dim=1))
+
 
 # --- 其他您可能用到的自定义模块的占位符 ---
 # 如果您使用了其他未在ultralytics.nn.modules中定义的模块，需要在此处添加它们的定义
@@ -88,24 +109,25 @@ def parse_custom_model(d, ch, verbose=True):
     if verbose:
         print(f"\n{'':>3}{'from':>18}{'n':>3}{'params':>10}  {'module':<40} {'arguments':<30}")
 
-    nc = d.get('nc')
+    nc = d.get("nc")
     if not isinstance(nc, int):
         raise TypeError(
-            f"YAML配置错误: 'nc' (类别/输出数量) 必须在YAML文件的顶部定义为一个整数，但现在的值是 {nc}。请在你的 .yaml 文件顶部添加 'nc: 1'。")
-    
-    gd = d.get('depth_multiple', 1.0)
-    gw = d.get('width_multiple', 1.0)
-    
+            f"YAML配置错误: 'nc' (类别/输出数量) 必须在YAML文件的顶部定义为一个整数，但现在的值是 {nc}。请在你的 .yaml 文件顶部添加 'nc: 1'。"
+        )
+
+    gd = d.get("depth_multiple", 1.0)
+    gw = d.get("width_multiple", 1.0)
+
     ch = [ch]
     layers, save, c2 = [], [], ch[-1]
-    for i, (f, n, m, args) in enumerate(d['backbone'] + d['head']):
+    for i, (f, n, m, args) in enumerate(d["backbone"] + d["head"]):
         # >>> 调试代码可以暂时保留或移除
         # print(f">>> 正在解析第 {i} 层: 模块={m}, 参数={args}")
-        
+
         # ==================== 从这里开始是全新的、更健壮的解析逻辑 ====================
         m_str = m if isinstance(m, str) else m.__name__
         m_class = None
-        
+
         try:
             # 优先在当前文件的全局变量中查找 (我们自己定义的模块，如 RegressionHead)
             m_class = globals().get(m_str)
@@ -117,63 +139,94 @@ def parse_custom_model(d, ch, verbose=True):
         except (AttributeError, TypeError):
             # 最后，在 ultralytics.nn.modules 中查找
             try:
-                m_class = getattr(__import__('ultralytics.nn.modules', fromlist=[m_str]), m_str)
+                m_class = getattr(__import__("ultralytics.nn.modules", fromlist=[m_str]), m_str)
             except (ImportError, AttributeError):
                 raise NameError(f"无法在任何已知位置解析模块 '{m_str}'。请检查拼写或导入。")
-        
+
         m = m_class
         # ============================== 新逻辑结束 ==============================
 
         for j, a in enumerate(args):
-            try: args[j] = eval(a) if isinstance(a, str) else a
-            except (NameError, SyntaxError): pass
-        
+            try:
+                args[j] = eval(a) if isinstance(a, str) else a
+            except (NameError, SyntaxError):
+                pass
+
         n = max(round(n * gd), 1) if n > 1 else n
 
-        if m in [Conv, C2f, CARC, C3, C3k2, Bottleneck, PSA, A2C2f, C2fCIB,C2PSA]:
+        if m in [Conv, C2f, CARC, C3, C3k2, Bottleneck, PSA, A2C2f, C2fCIB, C2PSA]:
             c1 = ch[f]
-            if m is C2fCIB: c2, args[0] = args[1], c1
-            else: c2 = args[0]
-            if c2 != nc: c2 = make_divisible(c2 * gw, 8)
-            if m is C2fCIB: args[1] = c2
-            else: args = [c1, c2, *args[1:]]
-            if m in [C2f, C3, C3k2, A2C2f, C2fCIB]: args.insert(2, n); n = 1
+            if m is C2fCIB:
+                c2, args[0] = args[1], c1
+            else:
+                c2 = args[0]
+            if c2 != nc:
+                c2 = make_divisible(c2 * gw, 8)
+            if m is C2fCIB:
+                args[1] = c2
+            else:
+                args = [c1, c2, *args[1:]]
+            if m in [C2f, C3, C3k2, A2C2f, C2fCIB]:
+                args.insert(2, n)
+                n = 1
         elif m is SPPF:
-            c1, c2 = ch[f], args[0]; c2 = make_divisible(c2 * gw, 8) if c2 != nc else c2; args = [c1, c2, *args[1:]]
+            c1, c2 = ch[f], args[0]
+            c2 = make_divisible(c2 * gw, 8) if c2 != nc else c2
+            args = [c1, c2, *args[1:]]
         elif m is SCDown:
-            c1, c2 = ch[f], args[0]; c2 = make_divisible(c2 * gw, 8) if c2 != nc else c2; args = [c1, c2, *args[1:]]
-        elif m is CustomConcat or m is Concat: # 同时兼容 Concat 和我们自己的 CustomConcat
+            c1, c2 = ch[f], args[0]
+            c2 = make_divisible(c2 * gw, 8) if c2 != nc else c2
+            args = [c1, c2, *args[1:]]
+        elif m is CustomConcat or m is Concat:  # 同时兼容 Concat 和我们自己的 CustomConcat
             c2 = sum(ch[x] for x in f)
-        elif m in [torch.nn.Upsample, nn.MaxPool2d]: # 使用 torch.nn.Upsample
+        elif m in [torch.nn.Upsample, nn.MaxPool2d]:  # 使用 torch.nn.Upsample
             c2 = ch[f]
         elif m in [AFGCAttention, PSA]:
-            c1 = c2 = ch[f]; args = [c1]
+            c1 = c2 = ch[f]
+            args = [c1]
         elif m is RegressionHead:
-            try: c1 = sum(ch[x] for x in f) if isinstance(f, list) else ch[f]
-            except IndexError: raise IndexError(f"\n\n[YAML配置错误] 在解析层 {i} ({m.__name__}) 时出错:\n  > 'from' 字段指定了无效的来源层索引: {f}\n")
-            c2 = 1; args = [c1]
+            try:
+                c1 = sum(ch[x] for x in f) if isinstance(f, list) else ch[f]
+            except IndexError:
+                raise IndexError(
+                    f"\n\n[YAML配置错误] 在解析层 {i} ({m.__name__}) 时出错:\n  > 'from' 字段指定了无效的来源层索引: {f}\n"
+                )
+            c2 = 1
+            args = [c1]
         else:
             c1 = ch[f]
             if args:
-                if isinstance(args[0], int): c2 = make_divisible(args[0] * gw, 8) if args[0] != nc else args[0]; args = [c1, c2, *args[1:]]
-                else: c2 = c1
-            else: c2 = c1; args = [c1]
+                if isinstance(args[0], int):
+                    c2 = make_divisible(args[0] * gw, 8) if args[0] != nc else args[0]
+                    args = [c1, c2, *args[1:]]
+                else:
+                    c2 = c1
+            else:
+                c2 = c1
+                args = [c1]
 
-        if m is CustomConcat: m_ = m(*args)
-        elif m is Concat: m_ = m(dimension=args[0])
-        else: m_ = nn.Sequential(*(m(*args) for _ in range(n))) if n > 1 else m(*args)
-            
-        t = str(m).split('.')[-1].replace("'>", "")
+        if m is CustomConcat:
+            m_ = m(*args)
+        elif m is Concat:
+            m_ = m(dimension=args[0])
+        else:
+            m_ = nn.Sequential(*(m(*args) for _ in range(n))) if n > 1 else m(*args)
+
+        t = str(m).split(".")[-1].replace("'>", "")
         np = sum(x.numel() for x in m_.parameters())
         m_.i, m_.f, m_.type, m_.np = i, f, t, np
-        if verbose: print(f'{i:>3}{str(f):>18}{n:>3}{np:10.0f}  {t:<40} {str(args):<30}')
-        
+        if verbose:
+            print(f"{i:>3}{str(f):>18}{n:>3}{np:10.0f}  {t:<40} {str(args):<30}")
+
         save.extend(x for x in ([f] if isinstance(f, int) else f) if x != -1)
         layers.append(m_)
-        if i == 0: ch = []
+        if i == 0:
+            ch = []
         ch.append(c2)
-        
+
     return nn.ModuleList(layers), sorted(list(set(save)))
+
+
 # my_yolo_regression_project/custom_modules/custom_tasks.py (多模态修改版)
 # ... (文件顶部的所有 import 和自定义模块 AFGCAttention, ARCBlock, CARC, CustomConcat 保持不变) ...
 
@@ -182,6 +235,7 @@ def parse_custom_model(d, ch, verbose=True):
 #     def __init__(self, dimension=1):
 #         super().__init__()
 #         self.d = dimension
+
 
 #     def forward(self, x):
 #         target_size = x[0].shape[2:]
@@ -195,8 +249,9 @@ def parse_custom_model(d, ch, verbose=True):
 class CustomConcat(nn.Module):
     """
     一个真正智能的拼接模块，它会自动找到输入中的最大空间尺寸，
-    并将所有较小的输入上采样到该尺寸，然后再进行拼接。
+    并将所有较小的输入上采样到该尺寸，然后再进行拼接。.
     """
+
     def __init__(self, dimension=1):
         super().__init__()
         self.d = dimension
@@ -211,37 +266,38 @@ class CustomConcat(nn.Module):
         resized_x = []
         for img in x:
             if img.shape[2:] != target_size:
-                resized_x.append(F.interpolate(img, size=target_size, mode='bilinear', align_corners=False))
+                resized_x.append(F.interpolate(img, size=target_size, mode="bilinear", align_corners=False))
             else:
                 resized_x.append(img)
-        
+
         # 3. 现在所有张量尺寸都已统一，可以安全地进行拼接
         return torch.cat(resized_x, self.d)
+
 
 class RegressionHead(nn.Module):
     def __init__(self, c1: int):
         super().__init__()
-        c_ = 1280 # 这个值很重要，它是图像特征的维度
+        c_ = 1280  # 这个值很重要，它是图像特征的维度
         self.c_ = c_
         self.conv = Conv(c1, c_, 1, 1)
         self.pool = nn.AdaptiveAvgPool2d(1)
         self.drop = nn.Dropout(p=0.1, inplace=True)
         self.linear = nn.Linear(c_, 1)
 
-    def forward(self, x, return_features=False): # <--- 修改点 1: 增加参数
+    def forward(self, x, return_features=False):  # <--- 修改点 1: 增加参数
         if isinstance(x, list):
             target_size = x[0].shape[2:]
             x = [
-                F.interpolate(img, size=target_size, mode='bilinear', align_corners=False)
+                F.interpolate(img, size=target_size, mode="bilinear", align_corners=False)
                 if img.shape[2:] != target_size
                 else img
                 for img in x
             ]
             x = torch.cat(x, 1)
-            
+
         features_flat = self.drop(self.pool(self.conv(x)).flatten(1))
-        
-        if return_features: # <--- 修改点 2: 根据参数返回特征或最终结果
+
+        if return_features:  # <--- 修改点 2: 根据参数返回特征或最终结果
             return features_flat
 
         return self.linear(features_flat)
@@ -257,13 +313,15 @@ class RegressionModel(nn.Module):
     def __init__(self, cfg, ch=3, nc=None, verbose=True):
         super().__init__()
         if isinstance(cfg, str):
-            with open(cfg, encoding='utf-8') as f: self.yaml = yaml.safe_load(f)
-        else: self.yaml = cfg
-        
+            with open(cfg, encoding="utf-8") as f:
+                self.yaml = yaml.safe_load(f)
+        else:
+            self.yaml = cfg
+
         self.model, self.save = parse_custom_model(deepcopy(self.yaml), ch=ch, verbose=verbose)
         self.initialize_biases()
 
-    def forward(self, x, return_features=False): # <--- 修改点 3: 增加参数
+    def forward(self, x, return_features=False):  # <--- 修改点 3: 增加参数
         y = []
         for m in self.model:
             if m.f != -1:
@@ -281,5 +339,6 @@ class RegressionModel(nn.Module):
         # ... 此方法代码完全不变 ...
         for m in self.model.modules():
             if isinstance(m, nn.Conv2d):
-                if hasattr(m, 'bn') and isinstance(m.bn, nn.BatchNorm2d):
-                    with torch.no_grad(): m.bn.bias.zero_()
+                if hasattr(m, "bn") and isinstance(m.bn, nn.BatchNorm2d):
+                    with torch.no_grad():
+                        m.bn.bias.zero_()
