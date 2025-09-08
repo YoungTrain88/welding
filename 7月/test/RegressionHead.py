@@ -1,6 +1,8 @@
+from typing import Optional, Union
+
 import torch
 import torch.nn as nn
-from typing import List, Union, Optional, Tuple
+
 
 # 假设 Conv 类已经定义好，这里我们用一个标准的 Conv2d 替代作为示例
 # from ultralytics.nn.modules import Conv  # 在实际项目中，你应该从原处导入
@@ -12,15 +14,17 @@ class Conv(nn.Module):
         self.conv = nn.Conv2d(c1, c2, k, s, p, groups=g, bias=False)
         self.bn = nn.BatchNorm2d(c2)
         self.act = nn.SiLU()
+
     def forward(self, x):
         return self.act(self.bn(self.conv(x)))
 
+
 # ==================== 修改后的回归头 ====================
 
+
 class RegressionHead(nn.Module):
-    """
-    YOLO Regression head, to transform feature maps x(b, c1, h, w) to a single regression value x(b, 1).
-    """
+    """YOLO Regression head, to transform feature maps x(b, c1, h, w) to a single regression value x(b, 1)."""
+
     export = False  # export mode
 
     def __init__(self, c1: int, k: int = 1, s: int = 1, p: Optional[int] = None, g: int = 1):
@@ -38,21 +42,23 @@ class RegressionHead(nn.Module):
         c_ = 1280  # Intermediate feature size, can be tuned
         self.conv = Conv(c1, c_, k, s, p, g)
         self.pool = nn.AdaptiveAvgPool2d(1)  # Global Average Pooling to get (b, c_, 1, 1)
-        self.drop = nn.Dropout(p=0.1, inplace=True) # Dropout can be adjusted or removed
-        
+        self.drop = nn.Dropout(p=0.1, inplace=True)  # Dropout can be adjusted or removed
+
         # --- KEY CHANGE 1: The output dimension of the linear layer is 1 ---
         self.linear = nn.Linear(c_, 1)  # Output a single value for regression
 
-    def forward(self, x: Union[List[torch.Tensor], torch.Tensor]) -> torch.Tensor:
+    def forward(self, x: Union[list[torch.Tensor], torch.Tensor]) -> torch.Tensor:
         """
-        Perform a forward pass. The output is the raw regression value.
+        Perform a forward pass.
+
+        The output is the raw regression value.
         """
         if isinstance(x, list):
             x = torch.cat(x, 1)
-        
+
         # Forward pass through conv, pool, flatten, and dropout
         x_flat = self.drop(self.pool(self.conv(x)).flatten(1))
-        
+
         # Get the final regression value from the linear layer
         prediction = self.linear(x_flat)
 
