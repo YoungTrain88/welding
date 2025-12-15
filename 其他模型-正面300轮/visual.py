@@ -1,42 +1,45 @@
 import os
-import torch
+
+import cv2
 import numpy as np
+import timm
+import torch
 from PIL import Image
 from torchvision import models
 from torchvision.transforms import transforms
-import timm
-import cv2
 
 IMG_SIZE = 224
-DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-PROJECT_ROOT = r'C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\其他模型-正面300轮'
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+PROJECT_ROOT = r"C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\其他模型-正面300轮"
 RUNS_DIR = PROJECT_ROOT
-IMAGE_NAME = '100359正.jpg'
-IMAGE_PATH = os.path.join(PROJECT_ROOT, 'datasets', 'images', IMAGE_NAME)
+IMAGE_NAME = "100359正.jpg"
+IMAGE_PATH = os.path.join(PROJECT_ROOT, "datasets", "images", IMAGE_NAME)
+
 
 def get_target_layer(model, model_name):
-    if 'resnet' in model_name:
+    if "resnet" in model_name:
         return model.layer4[-1]
-    elif 'densenet' in model_name:
+    elif "densenet" in model_name:
         return model.features[-1]
-    elif 'vgg' in model_name:
+    elif "vgg" in model_name:
         return model.features[-1]
-    elif 'mobilenet' in model_name:
+    elif "mobilenet" in model_name:
         return model.features[-1]
-    elif 'efficientnet' in model_name or 'convnext' in model_name or 'resnext' in model_name:
-        if hasattr(model, 'blocks'):
+    elif "efficientnet" in model_name or "convnext" in model_name or "resnext" in model_name:
+        if hasattr(model, "blocks"):
             return model.blocks[-1]
-        elif hasattr(model, 'stages'):
+        elif hasattr(model, "stages"):
             return model.stages[-1]
-        elif hasattr(model, 'layers'):
+        elif hasattr(model, "layers"):
             return model.layers[-1]
         else:
             return list(model.children())[-2]
-    elif 'vit' in model_name or 'swin' in model_name:
+    elif "vit" in model_name or "swin" in model_name:
         # ViT/Swin不需要target_layer
         return None
     else:
         raise ValueError(f"未知模型结构: {model_name}")
+
 
 def generate_gradcam(model, target_layer, image_tensor, image_pil):
     feature_maps = []
@@ -80,26 +83,29 @@ def generate_gradcam(model, target_layer, image_tensor, image_pil):
     superimposed_img = np.clip(superimposed_img, 0, 255).astype(np.uint8)
     return superimposed_img, output.item()
 
+
 def attention_rollout(model, image_tensor, image_pil, model_name):
     model.eval()
     attn_weights = []
     hooks = []
+
     def save_attn(module, input, output):
         attn_weights.append(output.detach().cpu())
+
     # ViT
-    if 'vit' in model_name:
+    if "vit" in model_name:
         for blk in model.blocks:
-            if hasattr(blk.attn, 'proj_drop'):
+            if hasattr(blk.attn, "proj_drop"):
                 hooks.append(blk.attn.proj_drop.register_forward_hook(save_attn))
-            elif hasattr(blk.attn, 'attn_drop'):
+            elif hasattr(blk.attn, "attn_drop"):
                 hooks.append(blk.attn.attn_drop.register_forward_hook(save_attn))
     # Swin
-    elif 'swin' in model_name:
-        if hasattr(model.layers[-1], 'blocks'):
+    elif "swin" in model_name:
+        if hasattr(model.layers[-1], "blocks"):
             for blk in model.layers[-1].blocks:
-                if hasattr(blk.attn, 'proj_drop'):
+                if hasattr(blk.attn, "proj_drop"):
                     hooks.append(blk.attn.proj_drop.register_forward_hook(save_attn))
-                elif hasattr(blk.attn, 'attn_drop'):
+                elif hasattr(blk.attn, "attn_drop"):
                     hooks.append(blk.attn.attn_drop.register_forward_hook(save_attn))
     else:
         raise RuntimeError("Attention Rollout仅支持ViT/Swin")
@@ -142,39 +148,42 @@ def attention_rollout(model, image_tensor, image_pil, model_name):
     superimposed_img = np.clip(superimposed_img, 0, 255).astype(np.uint8)
     return superimposed_img, output.item()
 
-preprocess = transforms.Compose([
-    transforms.Resize((IMG_SIZE, IMG_SIZE)),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-])
-img_pil = Image.open(IMAGE_PATH).convert('RGB')
+
+preprocess = transforms.Compose(
+    [
+        transforms.Resize((IMG_SIZE, IMG_SIZE)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ]
+)
+img_pil = Image.open(IMAGE_PATH).convert("RGB")
 img_tensor = preprocess(img_pil).unsqueeze(0).to(DEVICE)
 
 for folder in os.listdir(RUNS_DIR):
     folder_path = os.path.join(RUNS_DIR, folder)
-    if os.path.isdir(folder_path) and folder.startswith('runs_'):
-        best_pt = os.path.join(folder_path, 'best.pt')
+    if os.path.isdir(folder_path) and folder.startswith("runs_"):
+        best_pt = os.path.join(folder_path, "best.pt")
         if not os.path.exists(best_pt):
             print(f"{folder} 没有 best.pt，跳过")
             continue
-        model_name = folder.replace('runs_', '')
+        model_name = folder.replace("runs_", "")
         print(f"处理: {best_pt}，模型: {model_name}")
 
         # 加载模型结构
         try:
-            if model_name == 'resnet50':
+            if model_name == "resnet50":
                 model = models.resnet50(weights=None)
                 num_ftrs = model.fc.in_features
                 model.fc = torch.nn.Linear(num_ftrs, 1)
-            elif model_name == 'vgg16':
+            elif model_name == "vgg16":
                 model = models.vgg16(weights=None)
                 num_ftrs = model.classifier[6].in_features
                 model.classifier[6] = torch.nn.Linear(num_ftrs, 1)
-            elif model_name == 'densenet121':
+            elif model_name == "densenet121":
                 model = models.densenet121(weights=None)
                 num_ftrs = model.classifier.in_features
                 model.classifier = torch.nn.Linear(num_ftrs, 1)
-            elif model_name == 'mobilenet_v3_large':
+            elif model_name == "mobilenet_v3_large":
                 model = models.mobilenet_v3_large(weights=None)
                 num_ftrs = model.classifier[3].in_features
                 model.classifier[3] = torch.nn.Linear(num_ftrs, 1)
@@ -190,11 +199,11 @@ for folder in os.listdir(RUNS_DIR):
 
         # 判断模型类型
         try:
-            if 'vit' in model_name or 'swin' in model_name:
+            if "vit" in model_name or "swin" in model_name:
                 # Attention Rollout
                 try:
                     heatmap_image, prediction = attention_rollout(model, img_tensor, img_pil, model_name)
-                    save_path = os.path.join(folder_path, 'attnrollout_' + IMAGE_NAME)
+                    save_path = os.path.join(folder_path, "attnrollout_" + IMAGE_NAME)
                     Image.fromarray(heatmap_image).save(save_path)
                     print(f"已保存: {save_path}，预测值: {prediction:.4f}")
                 except Exception as e:
@@ -204,7 +213,7 @@ for folder in os.listdir(RUNS_DIR):
                 try:
                     target_layer = get_target_layer(model, model_name)
                     heatmap_image, prediction = generate_gradcam(model, target_layer, img_tensor, img_pil)
-                    save_path = os.path.join(folder_path, 'gradcam_' + IMAGE_NAME)
+                    save_path = os.path.join(folder_path, "gradcam_" + IMAGE_NAME)
                     Image.fromarray(heatmap_image).save(save_path)
                     print(f"已保存: {save_path}，预测值: {prediction:.4f}")
                 except Exception as e:
