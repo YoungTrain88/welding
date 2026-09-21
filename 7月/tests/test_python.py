@@ -78,8 +78,7 @@ def test_predict_txt():
     """Test YOLO predictions with file, directory, and pattern sources listed in a text file."""
     file = TMP / "sources_multi_row.txt"
     with open(file, "w") as f:
-        for src in SOURCES_LIST:
-            f.write(f"{src}\n")
+        f.writelines(f"{src}\n" for src in SOURCES_LIST)
     results = YOLO(MODEL)(source=file, imgsz=32)
     assert len(results) == 7  # 1 + 2 + 2 + 2 = 7 images
 
@@ -139,17 +138,17 @@ def test_predict_visualize(model):
 
 
 def test_predict_grey_and_4ch():
-    """Test YOLO prediction on SOURCE converted to greyscale and 4-channel images with various filenames."""
+    """Test YOLO prediction on SOURCE converted to grayscale and 4-channel images with various filenames."""
     im = Image.open(SOURCE)
     directory = TMP / "im4"
     directory.mkdir(parents=True, exist_ok=True)
 
-    source_greyscale = directory / "greyscale.jpg"
+    source_greyscale = directory / "grayscale.jpg"
     source_rgba = directory / "4ch.png"
     source_non_utf = directory / "non_UTF_测试文件_tést_image.jpg"
     source_spaces = directory / "image with spaces.jpg"
 
-    im.convert("L").save(source_greyscale)  # greyscale
+    im.convert("L").save(source_greyscale)  # grayscale
     im.convert("RGBA").save(source_rgba)  # 4-ch PNG with alpha
     im.save(source_non_utf)  # non-UTF characters in filename
     im.save(source_spaces)  # spaces in filename
@@ -180,8 +179,7 @@ def test_youtube():
 @pytest.mark.skipif(not IS_TMP_WRITEABLE, reason="directory is not writeable")
 @pytest.mark.parametrize("model", MODELS)
 def test_track_stream(model):
-    """
-    Test streaming tracking on a short 10 frame video using ByteTrack tracker and different GMC methods.
+    """Test streaming tracking on a short 10 frame video using ByteTrack tracker and different GMC methods.
 
     Note imgsz=160 required for tracking for higher confidence and better matches.
     """
@@ -270,7 +268,7 @@ def test_predict_callback_and_setup():
     model.add_callback("on_predict_batch_end", on_predict_batch_end)
 
     dataset = load_inference_source(source=SOURCE)
-    bs = dataset.bs  # noqa access predictor properties
+    bs = dataset.bs
     results = model.predict(dataset, stream=True, imgsz=160)  # source already setup
     for r, im0, bs in results:
         print("test_callback", im0.shape)
@@ -485,9 +483,8 @@ def test_utils_patches_torch_save():
 
     mock = MagicMock(side_effect=RuntimeError)
 
-    with patch("ultralytics.utils.patches._torch_save", new=mock):
-        with pytest.raises(RuntimeError):
-            torch_save(torch.zeros(1), TMP / "test.pt")
+    with patch("ultralytics.utils.patches._torch_save", new=mock), pytest.raises(RuntimeError):
+        torch_save(torch.zeros(1), TMP / "test.pt")
 
     assert mock.call_count == 4, "torch_save was not attempted the expected number of times"
 
@@ -653,12 +650,12 @@ def test_yoloe():
     from ultralytics.models.yolo.yoloe import YOLOEVPSegPredictor
 
     # visual-prompts
-    visuals = dict(
-        bboxes=np.array(
+    visuals = {
+        "bboxes": np.array(
             [[221.52, 405.8, 344.98, 857.54], [120, 425, 160, 445]],
         ),
-        cls=np.array([0, 1]),
-    )
+        "cls": np.array([0, 1]),
+    }
     model.predict(
         SOURCE,
         visual_prompts=visuals,
@@ -723,7 +720,7 @@ def test_grayscale(task: str, model: str, data: str) -> None:
     data["channels"] = 1  # add additional channels key for grayscale
     YAML.save(grayscale_data, data)
     # remove npy files in train/val splits if exists, might be created by previous tests
-    for split in {"train", "val"}:
+    for split in ("train", "val"):
         for npy_file in (Path(data["path"]) / data[split]).glob("*.npy"):
             npy_file.unlink()
 
