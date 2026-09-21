@@ -390,6 +390,8 @@ Ultralytics includes an `Annotator` class for annotating various data types. It'
     === "Python"
 
         ```python
+        import sys
+
         import cv2
 
         from ultralytics import YOLO
@@ -402,7 +404,7 @@ Ultralytics includes an `Annotator` class for annotating various data types. It'
 
         if not cap.isOpened():
             print("Error: Could not open video.")
-            exit()
+            sys.exit()
 
         # Initialize the video writer object.
         w, h, fps = (int(cap.get(x)) for x in (cv2.CAP_PROP_FRAME_WIDTH, cv2.CAP_PROP_FRAME_HEIGHT, cv2.CAP_PROP_FPS))
