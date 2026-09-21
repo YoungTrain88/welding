@@ -42,5 +42,5 @@ head:
   - [[-1, 10], 1, Concat, [1]] # cat head P5
   - [-1, 3, C2fCIB, [1024, True, True]] # 22 (P5/32-large)
 
-  - [[16,19, 22], 1, RegressionHead, []] # RegressionHead(P3, P4, P5,)
+  - [[16, 19, 22], 1, RegressionHead, []] # RegressionHead(P3, P4, P5,)
 

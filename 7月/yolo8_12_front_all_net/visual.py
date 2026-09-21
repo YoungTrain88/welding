@@ -1,13 +1,16 @@
 import os
-import torch
-import numpy as np
-from PIL import Image
-from torchvision.transforms import transforms
+
 import cv2
+import numpy as np
+import torch
 
 # 导入你的自定义模型
 from custom_modules.custom_tasks import RegressionModel
-IMAGE_NAME = '100359正.jpg'
+from PIL import Image
+from torchvision.transforms import transforms
+
+IMAGE_NAME = "100359正.jpg"
+
 
 def generate_gradcam(model, target_layer, image_tensor, image_pil):
     feature_maps = []
@@ -48,31 +51,34 @@ def generate_gradcam(model, target_layer, image_tensor, image_pil):
     superimposed_img = np.clip(superimposed_img, 0, 255).astype(np.uint8)
     return superimposed_img, output.item()
 
+
 # 配置
-DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 # PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = r"C:\Users\User\Desktop\焊接\ultralytics-main\ultralytics-main\yolo8_12_front_all_net"
 RUNS_DIR = PROJECT_ROOT
-IMAGE_PATH = os.path.join(PROJECT_ROOT, 'datasets', 'images', IMAGE_NAME)
-YAML_DIR = os.path.join(PROJECT_ROOT, 'yaml')
+IMAGE_PATH = os.path.join(PROJECT_ROOT, "datasets", "images", IMAGE_NAME)
+YAML_DIR = os.path.join(PROJECT_ROOT, "yaml")
 
 # 读取图片
-img_pil = Image.open(IMAGE_PATH).convert('RGB')
-preprocess = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-])
+img_pil = Image.open(IMAGE_PATH).convert("RGB")
+preprocess = transforms.Compose(
+    [
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ]
+)
 img_tensor = preprocess(img_pil).unsqueeze(0).to(DEVICE)
 
 # 遍历所有 runs-* 文件夹
 for folder in os.listdir(RUNS_DIR):
     folder_path = os.path.join(RUNS_DIR, folder)
-    if os.path.isdir(folder_path) and folder.startswith('runs'):
-        best_pt = os.path.join(folder_path, 'best.pt')
+    if os.path.isdir(folder_path) and folder.startswith("runs"):
+        best_pt = os.path.join(folder_path, "best.pt")
         # 自动推断yaml文件名
-        yaml_base = folder.replace('runs-', '')  # 例如 runs-yolov11n-r-att-conv -> yolov11n-r-att-conv
-        yaml_path = os.path.join(YAML_DIR, f'{yaml_base}.yaml')
+        yaml_base = folder.replace("runs-", "")  # 例如 runs-yolov11n-r-att-conv -> yolov11n-r-att-conv
+        yaml_path = os.path.join(YAML_DIR, f"{yaml_base}.yaml")
         if not os.path.exists(best_pt):
             print(f"{folder} 没有 best.pt，跳过")
             continue
@@ -94,6 +100,6 @@ for folder in os.listdir(RUNS_DIR):
         heatmap_image, prediction = generate_gradcam(model, target_layer, img_tensor, img_pil)
 
         # 保存结果
-        save_path = os.path.join(folder_path, 'gradcam_' + IMAGE_NAME)
+        save_path = os.path.join(folder_path, "gradcam_" + IMAGE_NAME)
         Image.fromarray(heatmap_image).save(save_path)
         print(f"已保存: {save_path}")
