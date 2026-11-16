@@ -111,7 +111,7 @@ The YOLOE models are easy to integrate into your Python applications. Ultralytic
 
         model = YOLOE("yoloe-11s-seg.pt")
         head_index = len(model.model.model) - 1
-        freeze = [str(f) for f in range(0, head_index)]
+        freeze = [str(f) for f in range(head_index)]
         for name, child in model.model.model[-1].named_children():
             if "cv3" not in name:
                 freeze.append(f"{head_index}.{name}")
@@ -192,20 +192,20 @@ YOLOE supports both text-based and visual prompting. Using prompts is straightfo
 
         # Define visual prompts using bounding boxes and their corresponding class IDs.
         # Each box highlights an example of the object you want the model to detect.
-        visual_prompts = dict(
-            bboxes=np.array(
+        visual_prompts = {
+            "bboxes": np.array(
                 [
                     [221.52, 405.8, 344.98, 857.54],  # Box enclosing person
                     [120, 425, 160, 445],  # Box enclosing glasses
                 ],
             ),
-            cls=np.array(
+            "cls": np.array(
                 [
                     0,  # ID to be assigned for person
                     1,  # ID to be assigned for glassses
                 ]
             ),
-        )
+        }
 
         # Run inference on an image, using the provided visual prompts as guidance
         results = model.predict(
@@ -234,10 +234,10 @@ YOLOE supports both text-based and visual prompting. Using prompts is straightfo
         model = YOLOE("yoloe-11l-seg.pt")
 
         # Define visual prompts based on a separate reference image
-        visual_prompts = dict(
-            bboxes=np.array([[221.52, 405.8, 344.98, 857.54]]),  # Box enclosing person
-            cls=np.array([0]),  # ID to be assigned for person
-        )
+        visual_prompts = {
+            "bboxes": np.array([[221.52, 405.8, 344.98, 857.54]]),  # Box enclosing person
+            "cls": np.array([0]),  # ID to be assigned for person
+        }
 
         # Run prediction on a different image, using reference image to guide what to look for
         results = model.predict(
@@ -264,8 +264,8 @@ YOLOE supports both text-based and visual prompting. Using prompts is straightfo
 
         # Define visual prompts using bounding boxes and their corresponding class IDs.
         # Each box highlights an example of the object you want the model to detect.
-        visual_prompts = dict(
-            bboxes=[
+        visual_prompts = {
+            "bboxes": [
                 np.array(
                     [
                         [221.52, 405.8, 344.98, 857.54],  # Box enclosing person
@@ -274,7 +274,7 @@ YOLOE supports both text-based and visual prompting. Using prompts is straightfo
                 ),
                 np.array([[150, 200, 1150, 700]]),
             ],
-            cls=[
+            "cls": [
                 np.array(
                     [
                         0,  # ID to be assigned for person
@@ -283,7 +283,7 @@ YOLOE supports both text-based and visual prompting. Using prompts is straightfo
                 ),
                 np.array([0]),
             ],
-        )
+        }
 
         # Run inference on multiple image, using the provided visual prompts as guidance
         results = model.predict(
@@ -407,22 +407,22 @@ Model validation on a dataset is streamlined as follows:
         from ultralytics import YOLOE
         from ultralytics.models.yolo.yoloe import YOLOESegTrainerFromScratch
 
-        data = dict(
-            train=dict(
-                yolo_data=["Objects365.yaml"],
-                grounding_data=[
-                    dict(
-                        img_path="../datasets/flickr/full_images/",
-                        json_file="../datasets/flickr/annotations/final_flickr_separateGT_train_segm.json",
-                    ),
-                    dict(
-                        img_path="../datasets/mixed_grounding/gqa/images",
-                        json_file="../datasets/mixed_grounding/annotations/final_mixed_train_no_coco_segm.json",
-                    ),
+        data = {
+            "train": {
+                "yolo_data": ["Objects365.yaml"],
+                "grounding_data": [
+                    {
+                        "img_path": "../datasets/flickr/full_images/",
+                        "json_file": "../datasets/flickr/annotations/final_flickr_separateGT_train_segm.json",
+                    },
+                    {
+                        "img_path": "../datasets/mixed_grounding/gqa/images",
+                        "json_file": "../datasets/mixed_grounding/annotations/final_mixed_train_no_coco_segm.json",
+                    },
                 ],
-            ),
-            val=dict(yolo_data=["lvis.yaml"]),
-        )
+            },
+            "val": {"yolo_data": ["lvis.yaml"]},
+        }
 
         model = YOLOE("yoloe-11l-seg.yaml")
         model.train(
@@ -464,22 +464,22 @@ Model validation on a dataset is streamlined as follows:
         from ultralytics import YOLOE
         from ultralytics.models.yolo.yoloe import YOLOESegVPTrainer
 
-        data = dict(
-            train=dict(
-                yolo_data=["Objects365.yaml"],
-                grounding_data=[
-                    dict(
-                        img_path="../datasets/flickr/full_images/",
-                        json_file="../datasets/flickr/annotations/final_flickr_separateGT_train_segm.json",
-                    ),
-                    dict(
-                        img_path="../datasets/mixed_grounding/gqa/images",
-                        json_file="../datasets/mixed_grounding/annotations/final_mixed_train_no_coco_segm.json",
-                    ),
+        data = {
+            "train": {
+                "yolo_data": ["Objects365.yaml"],
+                "grounding_data": [
+                    {
+                        "img_path": "../datasets/flickr/full_images/",
+                        "json_file": "../datasets/flickr/annotations/final_flickr_separateGT_train_segm.json",
+                    },
+                    {
+                        "img_path": "../datasets/mixed_grounding/gqa/images",
+                        "json_file": "../datasets/mixed_grounding/annotations/final_mixed_train_no_coco_segm.json",
+                    },
                 ],
-            ),
-            val=dict(yolo_data=["lvis.yaml"]),
-        )
+            },
+            "val": {"yolo_data": ["lvis.yaml"]},
+        }
 
         model = YOLOE("yoloe-11l-seg.pt")
         # replace to yoloe-11l-seg-det.pt if converted to detection model
@@ -487,7 +487,7 @@ Model validation on a dataset is streamlined as follows:
 
         # freeze every layer except of the savpe module.
         head_index = len(model.model.model) - 1
-        freeze = list(range(0, head_index))
+        freeze = list(range(head_index))
         for name, child in model.model.model[-1].named_children():
             if "savpe" not in name:
                 freeze.append(f"{head_index}.{name}")
@@ -545,22 +545,22 @@ Model validation on a dataset is streamlined as follows:
         ```python
         from ultralytics import YOLOE
 
-        data = dict(
-            train=dict(
-                yolo_data=["Objects365.yaml"],
-                grounding_data=[
-                    dict(
-                        img_path="../datasets/flickr/full_images/",
-                        json_file="../datasets/flickr/annotations/final_flickr_separateGT_train_segm.json",
-                    ),
-                    dict(
-                        img_path="../datasets/mixed_grounding/gqa/images",
-                        json_file="../datasets/mixed_grounding/annotations/final_mixed_train_no_coco_segm.json",
-                    ),
+        data = {
+            "train": {
+                "yolo_data": ["Objects365.yaml"],
+                "grounding_data": [
+                    {
+                        "img_path": "../datasets/flickr/full_images/",
+                        "json_file": "../datasets/flickr/annotations/final_flickr_separateGT_train_segm.json",
+                    },
+                    {
+                        "img_path": "../datasets/mixed_grounding/gqa/images",
+                        "json_file": "../datasets/mixed_grounding/annotations/final_mixed_train_no_coco_segm.json",
+                    },
                 ],
-            ),
-            val=dict(yolo_data=["lvis.yaml"]),
-        )
+            },
+            "val": {"yolo_data": ["lvis.yaml"]},
+        }
 
         model = YOLOE("yoloe-11l-seg.pt")
         # replace to yoloe-11l-seg-det.pt if converted to detection model
@@ -568,7 +568,7 @@ Model validation on a dataset is streamlined as follows:
 
         # freeze layers.
         head_index = len(model.model.model) - 1
-        freeze = [str(f) for f in range(0, head_index)]
+        freeze = [str(f) for f in range(head_index)]
         for name, child in model.model.model[-1].named_children():
             if "cv3" not in name:
                 freeze.append(f"{head_index}.{name}")
